@@ -4,7 +4,7 @@
 Author: Emma Thomson \
 Year: 2020-2023 \
 Institution: Centre for Medical Image Computing: University College London \
-Email: thomson.l.emma@gmail.com 
+Email: thomson.l.emma@gmail.com (e.thomson.19@ucl.ac.uk - no access)
 
 -----------------------------------------------------------------------------
 Bloch simulation code for a two compartment model with a semipermeable barrier 
@@ -34,7 +34,7 @@ IMPORTANT ASSUMPTIONS
 - The slice profile array used to calculate slice profile effects is provided in sliceProfile/SliceProfile.mat. If you wish to regenerate the slice profile, you will need to use the Multiband RF toolbox repository [1]
 - An example 5D dictionary can be found on my dropbox [*] 
 
-###To generate noisy signals:
+### To generate noisy signals:
 
 - Use the dictionary generation code as above, but change the 'noise' parameter (indicates the number of noise levels calculated) and 'samples' parameter (number of times each noise level is recalculated) 
 - These signals are matched through the the dictionaryMatching/simulationMatching.py code and the arrays of matched parameters stored in Dictionaries/SimulationMatching/Matching[DictionaryName]
