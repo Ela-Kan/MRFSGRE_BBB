@@ -22,14 +22,16 @@ import numpy as np
 import sys
 import os
 import platform
-sys.path.insert(0, "./coreSimulations/functions/")
-from blochSimulation import MRFSGRE
+
+#go up a folder
+#os.chdir("..")
 
 ''' ----------------------SPECIFY PARAMETERS------------------------------ '''
 
 #Definition of the function that calculates the parameters for each of the 
 # multiprocessing threads
 def parameterGeneration():
+    
     # To allow for multiple instances of the same code to be run simulataneously 
     # an instance is specified to ensure FA and TR array files are called 
     # to the correct simulation
@@ -81,7 +83,7 @@ def parameterGeneration():
     #In folder will show as "DictionaryXXX" 
     #This folder needs to already exist or code will not run 
 
-    dictionaryId  = 'IsosampleLarge'
+    dictionaryId  = 'Test'
 
     ## SHAPE OF VARIATIONS
     
@@ -136,9 +138,10 @@ def parameterGeneration():
         #Add gaps every 250 repetitions
         for ii in range(1,noOfGaps):
             faArray[250*ii:250*ii+gapLength] = 0
-      
+     
+    print(os.getcwd())
     #Save array for calling in the main function later
-    np.save('./holdArrays/faArray_'  + str(instance) + '.npy', faArray)
+    np.save('./functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
     
     ##  DEFINING TR ARRAY
     
@@ -153,7 +156,7 @@ def parameterGeneration():
         #Generate a uniform random array between for the number of repetitions
         trArray = np.random.uniform(d,e,[noOfRepetitions])
     #Save array for calling in the main function later
-    np.save('./holdArrays/trArray_' + str(instance) + '.npy', trArray)
+    np.save('./functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
 
     #Get all combinations of arrays (parameters for each dictionary entry)
     #In format of list of tuples
@@ -176,6 +179,9 @@ def parameterGeneration():
 #Requires a single argument for parallelisation to work so previous function 
 #concatenated all parameters into one list of tuples
 def simulationFunction(paramArray):
+    
+    sys.path.insert(0, "./functions/")
+    from blochSimulation import MRFSGRE
     
     #Is there an inversion pulse
     invSwitch = True
@@ -205,7 +211,8 @@ if __name__ == '__main__':
     #Multiprocessing requires all moduels used within the threads to be defined
     #within __main__
     #I think this is a safety feature
-    os.chdir("./functions/")
+    #os.chdir("./functions/")
+    #sys.path.insert(0, "./functions/")
     import time
     import itertools
     import multiprocessing as mp
@@ -213,7 +220,7 @@ if __name__ == '__main__':
     #Currently set to perform differently on my Mac ('Darwin') system vs the cluster
     if platform.system() == "Darwin":
         #If on local computer can use all CPUs
-        pool = mp.Pool(10)
+        pool = mp.Pool(8)
     else:
         #If on cluster only use a few 
         pool = mp.Pool(8)

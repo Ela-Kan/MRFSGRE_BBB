@@ -30,7 +30,7 @@ IMPORTANT ASSUMPTIONS
 
 - Run dictionaryGeneration.py (or dictionaryGenerationGPU.py if you want to run on GPUs)
 - Code within the functions folder contains the functions called by the dictionary generation code and does not need to be accessed (unless you wish to make fundamental changes to the simulation) 
-- The dictionary generation code saves the signals in a folder within ./Dictionaries. Run the conversion code (dictionaryMatching/dictionaryConversion.py) in order to compress the dictionary into one dictionary.txt file and one lookupTable.txt file 
+- The dictionary generation code saves the signals in a folder within ./dictionaries/. Run the conversion code (dictionaryMatching/dictionaryConversion.py) in order to compress the dictionary into one dictionary.txt file and one lookupTable.txt file 
 - The slice profile array used to calculate slice profile effects is provided in sliceProfile/SliceProfile.mat. If you wish to regenerate the slice profile, you will need to use the Multiband RF toolbox repository [1]
 - An example 5D dictionary can be found on my dropbox [*] 
 

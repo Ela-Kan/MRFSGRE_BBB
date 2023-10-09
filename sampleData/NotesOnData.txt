@@ -19,6 +19,6 @@ Median Filter
 
 Image Segmentation
 
-Brain extraction was done using FSL BET and segmentation using FLIRT/FNIRT and SynthSeg. SynthSeg provides personal segmentations of both cortical and subcortical regions using a convolutional neural network. As large voxel sizes lead to partial volume effects, partial volume segmentations for white and grey matter were thresholded so that only voxels that contained 90$\%$ of the respective tissue were used in the calculation of numerical results.
+Brain extraction was done using FSL BET and segmentation using FLIRT/FNIRT and SynthSeg. SynthSeg provides personal segmentations of both cortical and subcortical regions using a convolutional neural network. As large voxel sizes lead to partial volume effects, partial volume segmentations for white and grey matter were thresholded so that only voxels that contained 90% of the respective tissue were used in the calculation of numerical results.
 
 The segmentation code is provided in the file 'processSynthSeg.sh' requires access to the original DICOM files and therefore is not runnable. It has been included for your information.

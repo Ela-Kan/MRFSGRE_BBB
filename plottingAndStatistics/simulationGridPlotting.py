@@ -35,7 +35,6 @@ t0 = time.time()
 
 #go up a folder
 os.chdir("..")
-print(os.getcwd())
 
 ''' -----------------------------FUNCTIONS--------------------------------- '''
 

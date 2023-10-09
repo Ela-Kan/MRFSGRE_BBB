@@ -38,6 +38,12 @@ import time
 
 t0 = time.time()
 
+import warnings
+warnings.filterwarnings("ignore")
+
+#go up a folder
+os.chdir("..")
+
 ''' -----------------------------INPUTS--------------------------------- '''
 
 #Input volunteer number
@@ -56,7 +62,7 @@ acqlen = 2000
 pathToFolder = ('./SampleData/Volunteer' + str(volunteer_no) + '/MRF')
 bigpath = (pathToFolder + '/Images/') 
 
-dictPath = ('./Dictionaries/Dictionary' + dictfolder + '/')
+dictPath = ('./dictionaries/Dictionary' + dictfolder + '/')
 
 #Use the denoised data? 
 denoise = False
@@ -385,20 +391,7 @@ if save_im == 'yes':
             filestr = 'B1+_' + dictfolder + '.nii.gz' 
         #rotate_img = np.rot90(new_image, 180)
         nib.save(new_image, os.path.join(pathToFolder, 'Maps', filestr))  
-        
-        im = param_est[:,:,5]
-        im = np.flipud(im).T
-        new_image = nib.Nifti1Image(im, affine=aff)
-        if denoise is True: 
-            if filt == 'G':
-                filestr = 'Relative M0[a.u.]_' + dictfolder + '_G_S_' + str(sigma) +  '.nii.gz'
-            elif filt == 'MF': 
-                filestr = 'Relative M0[a.u.]_' + dictfolder + '_MF_S_3.nii.gz'
-        else: 
-            filestr = 'Relative M0[a.u.]_' + dictfolder + '.nii.gz' 
-        #rotate_img = np.rot90(new_image, 180)
-        nib.save(new_image, os.path.join(pathToFolder, 'Maps', filestr))  
-        
+
         im = snr
         im = np.flipud(im).T
         new_image = nib.Nifti1Image(im, affine=aff)

@@ -26,12 +26,6 @@ from skimage.transform import resize
 from scipy import interpolate
 from scipy import signal
 import cv2
-import warnings
-warnings.filterwarnings("ignore")
-
-#go up a folder
-os.chdir("..")
-print(os.getcwd())
 
 plt.rcParams['font.family'] = 'Times'
 plt.rcParams['font.size'] = 14
@@ -45,6 +39,13 @@ plt.rcParams['figure.titlesize'] = 12
 import time
 
 t0 = time.time()
+
+import warnings
+warnings.filterwarnings("ignore")
+
+#go up a folder
+os.chdir("..")
+print(os.getcwd())
 
 ''' -----------------------------FUNCTIONS--------------------------------- '''
 
@@ -79,7 +80,7 @@ b1_dict_step = 2
 pathToFolder = ('./SampleData/Volunteer' + str(volunteer_no) + '/MRF')
 bigpath = (pathToFolder + '/Images/') 
 
-dictPath = ('./Dictionaries/Dictionary' + dictfolder + '/')
+dictPath = ('./dictionaries/Dictionary' + dictfolder + '/')
 
 #Use the denoised data? 
 denoise = False
@@ -89,7 +90,7 @@ filt = 'G' #G = gaussian #MF = median filtering
 sigma = 0.5 #1 
 
 #Display masked images? 
-mask_im = 'no'
+mask_im = 'yes'
 #Save parameter maps? 
 save_im = 'yes'
 #Segement images?
@@ -198,7 +199,6 @@ binary_mask_seg = abs(gradtot + binary_mask_seg)
 binary_mask_seg[binary_mask_seg>2] = 0 
 binary_mask_seg[binary_mask_seg == 2] = 1
 
-
 ''' --------------------------READ IN SIMS------------------------------ '''
 
 print("Starting Dictionary Read in:  " + str(time.strftime('%X %x %Z')))
@@ -209,13 +209,13 @@ mean_sims = np.zeros([no_entries])
 #Loading all dictionary signals into array    
 with open(os.path.join(dictPath + "dictionary.txt" ), 'r') as f:
     lines = np.loadtxt(f, delimiter=",")
-array = np.asarray(lines)
+array = np.asarray(lines).T
 
 
 #Load lookup table  
 with open(os.path.join(dictPath + "lookupTable.txt" ), 'r') as f:
     lines = np.loadtxt(f, delimiter=",")
-lookup = np.asarray(lines)   
+lookup = np.asarray(lines).T
 lookupList = lookup.T.tolist()#list(f for f in list(lines))
 
 

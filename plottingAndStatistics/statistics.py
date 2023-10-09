@@ -25,8 +25,6 @@ import skimage.color
 import skimage.filters
 import nibabel as nib
 from skimage.transform import resize
-import warnings
-warnings.filterwarnings("ignore")
 import cv2
 import scipy
 import pingouin as pg
@@ -35,9 +33,11 @@ import pandas as pd
 plt.rcParams.update({'font.size': 24})
 plt.rcParams['font.family'] = 'Times'
 
+import warnings
+warnings.filterwarnings("ignore")
+
 #go up a folder
 os.chdir("..")
-print(os.getcwd())
 
 ''' -----------------------------FUNCTIONS--------------------------------- '''
 
@@ -167,7 +167,6 @@ else:
 
 #image resolution 
 res_x =  64; res_y = 64;
-
 
 
 ''' -----------------------------LOAD MAPS--------------------------------- '''

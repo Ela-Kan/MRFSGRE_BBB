@@ -20,11 +20,17 @@ import time
 
 t0 = time.time()
 
+import warnings
+warnings.filterwarnings("ignore")
+
+#go up a folder
+os.chdir("..")
+
 ''' -----------------------------INPUTS--------------------------------- '''
 acqlen = 2000
 
 # Dictionary folder
-dictfolder = 'HYDRAXXL'
+dictfolder = 'WEXandBVfreeNew'
 
 #Type of normalisation performed 
 #Set to L2-norm (standard)
@@ -77,7 +83,7 @@ array = np.squeeze(array.astype(int)).T
 np.savetxt(dictPath + "dictionary.txt", array, fmt="%i", delimiter=",", newline="\n")
 
 #Turn the look up table into an array
-lookup = np.array(files).T
+lookup = np.array(files)
 np.savetxt(dictPath + "lookupTable.txt", lookup, delimiter=",", newline="\n")
 
 #Stop timer and print                                                    

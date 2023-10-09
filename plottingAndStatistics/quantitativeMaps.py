@@ -28,6 +28,7 @@ import nibabel as nib
 from skimage.transform import resize
 import cv2
 import scipy
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -41,7 +42,7 @@ import cmcrameri.cm as cmc
 #show_cmaps()
 colourHold =  cmc.devon
 colour_map1 = colour_map2 = colour_map3 = colour_map4 = colour_map5 = colourHold
-colour_map6 =  cmc.lajolla_r 
+colour_map6 =  cmc.lajolla 
 
 import time 
 
@@ -49,7 +50,6 @@ t0 = time.time()
 
 #go up a folder
 os.chdir("..")
-print(os.getcwd())
 
 ''' -----------------------------INPUTS--------------------------------- '''
 
