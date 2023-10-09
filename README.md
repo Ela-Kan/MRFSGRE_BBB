@@ -58,7 +58,7 @@ IMPORTANT ASSUMPTIONS
 
 If comparing to the relevant publication: 
 - 2D simulation dictionary = Dictionary2Dsim
-- 5D simulation dictionary = Dictionary5Dsim (warning: this dictionary is over 200GB)
+- 5D simulation dictionary = Dictionary5Dsim (warning: this dictionary is over 270GB)
 - Dictionary for experimental data = DictionaryLarge
 
 ------------------------------------------------------------------------------
