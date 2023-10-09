@@ -39,7 +39,7 @@ IMPORTANT ASSUMPTIONS
 - Use the dictionary generation code as above, but change the 'noise' parameter (indicates the number of noise levels calculated) and 'samples' parameter (number of times each noise level is recalculated) 
 - These signals are matched through the the dictionaryMatching/simulationMatching.py code and the arrays of matched parameters stored in Dictionaries/SimulationMatching/Matching[DictionaryName]
 - To plot these results as quiver plots associated with these simulations run the plottingAndStatistics/simulationGridPlotting.py code
-- A 2D and 5D dictionary of noisy signals at 10 noise levels can be found on my dropbox [*]
+- A 2D and 5D dictionary of noisy signals at 10 noise levels can be found on my Dropbox [*]
 
 
 ### To generate quantitative maps: 
