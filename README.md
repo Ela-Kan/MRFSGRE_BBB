@@ -24,9 +24,9 @@ IMPORTANT ASSUMPTIONS
    easier to visualise
 
 ------------------------------------------------------------------------------
-##USER NOTES: 
+## USER NOTES: 
 
-###To generate dictionaries: 
+### To generate dictionaries: 
 
 - Run dictionaryGeneration.py (or dictionaryGenerationGPU.py if you want to run on GPUs)
 - Code within the functions folder contains the functions called by the dictionary generation code and does not need to be accessed (unless you wish to make fundamental changes to the simulation) 
@@ -42,14 +42,14 @@ IMPORTANT ASSUMPTIONS
 - A 2D and 5D dictionary of noisy signals at 10 noise levels can be found on my dropbox [*]
 
 
-###To generate quantitative maps: 
+### To generate quantitative maps: 
 
 - To generate quantitative maps with the standard matching as described in Ma et al. [2] run the dictionaryMatching/standardMatching.py code. This code generates and saves the five quantitative maps to VolunteerX/MRF/Maps/. 
 - To generate maps using the novel 'B1-first' matching technique run dictionaryMatching/b1FirstMatching.py. Bar the B1 matching changes this code performs the same way as the standard matching code
 - A single volunteer data set is provided (SampleData) for your testing purposes 
 - In order to view these maps in a single figure use the plotting code (plottingAndStatistics/quantativeMaps.py)
 
-###To perform statistics:
+### To perform statistics:
 
 - Run all the statistics from the plottingAndStatistics/statistics.py code. This code calculates the repeatability coefficient and intraclass correlation coefficient between scan and rescan data, Bland-Altmann plots, bar chart for mean parameter values for white and grey matter, and performs t-tests for these means. 
 
