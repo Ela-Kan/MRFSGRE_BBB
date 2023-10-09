@@ -9,7 +9,6 @@ Email: e.thomson.19@ucl.ac.uk
 -------------------------------------------------------------------------------"""
 
 """-------------------------------PACKAGES--------------------------------------"""
-
 import numpy as np
 
 """---------------------------MAIN FUNCTION--------------------------------------"""
@@ -37,11 +36,7 @@ def rfpulse(vecMArrayTissue, vecMArrayBlood, loop, faArray,noOfIsochromatsZ, sli
         rotX[theta,:,:] = np.array([[1, 0, 0], [0, np.cos(thetaX[theta]), np.sin(thetaX[theta])], \
                         [0, -np.sin(thetaX[theta]), np.cos(thetaX[theta])]])
         rotY[theta,:,:] = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
-    '''
-    rotX = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
-    rotY = np.array([[np.cos(thetaX), 0, np.sin(thetaX)], [0, 1, 0], \
-                    [-np.sin(thetaX), 0, np.cos(thetaX)]])
-    '''
+
     #Combined rotation (in this case same as rotX)
     vecMRotation = np.matmul(rotY,rotX) 
 

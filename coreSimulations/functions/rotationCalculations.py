@@ -17,7 +17,6 @@ import numpy as np
 
 def rotation_calculations(positionArrayX, positionArrayY, gradientX, \
     gradientY, noOfIsochromatsZ, deltaT):
-
     
     #Find gradient field strength from both x and y gradients at each isochromat 
     # position

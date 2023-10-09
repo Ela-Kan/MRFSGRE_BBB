@@ -29,7 +29,6 @@ def longTR(remainingDuration, deltaT, gradientX, gradientY,positionArrayX,
     #Set a hold array
    vecMIsochromat = vecMArrayTissue
 
-    
    # The magnitude change due to relaxation is then applied to each
    # coordinate
    vecMIsochromat[:,:,:,0,:] = np.exp(-(remainingDuration)/t2Star)*vecMIsochromat[:,:,:,0,:]

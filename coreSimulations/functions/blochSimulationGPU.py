@@ -71,7 +71,7 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
         SLICE PROFILE ARRAY READ IN
     '''
     if sliceProfileSwitch == 1: 
-        sliceProfilePath = '/Users/emmathomson/Dropbox/Coding/BBB_MRFSGRE/sliceProfile/sliceProfile.mat'
+        sliceProfilePath = './sliceProfile/sliceProfile.mat'
         sliceProfileArray = io.loadmat(sliceProfilePath)['sliceProfile']
         #to give an even sample of the slice profile array 
         endPoint = np.size(sliceProfileArray, 1)
@@ -95,27 +95,18 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
     vecMArrayBlood = np.expand_dims(vecMArrayBlood, axis=4)
     
     ### FA array
-    if platform.system() == "Darwin":
-        faString = '/Users/emmathomson/Dropbox/Coding/BBB_MRFSGRE/coreSimulations/functions/holdArrays/faArray_' + str(instance) + '.npy'
-    else: 
-        faString = '/home/ethomson/Coding/Fingerprinting/coreSimulations/functions/holdArrays/faArray_' + str(instance) + '.npy'
+    faString = './coreSimulations/functions/holdArrays/faArray_' + str(instance) + '.npy'
     faArray = np.load(faString) 
 
     ### Open and round TR array 
-    if platform.system() == "Darwin":
-        trString = '/Users/emmathomson/Dropbox/Coding/BBB_MRFSGRE/coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy'
-    else:
-        trString = '/home/ethomson/Coding/Fingerprinting/coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy'
+    trString = './coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy'
     trArray = np.load(trString)
     # Rounding is required in order to assure that TR is divisable by deltaT
     trRound = np.round(trArray, 0)
     
     ### Open noise sample array
-    if platform.system() == "Darwin":
-        noiseArray = np.load('/Users/emmathomson/Dropbox/Coding/BBB_MRFSGRE/coreSimulations/functions//holdArrays/noiseSamples.npy')
-    else:
-        noiseArray = np.load('/home/ethomson/Coding/Fingerprinting/coreSimulations/functions/holdArrays/noiseSamples.npy')
-
+    noiseArray = np.load('./coreSimulations/functions//holdArrays/noiseSamples.npy')
+    
     ### Empty signal array to store all magnitization at all time points 
     signal = np.zeros([noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3, noOfRepetitions])
     
@@ -151,9 +142,8 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
     for r in range(noOfRepetitions):  
         if inv == 0:
             signalDivide[r] = (sum(trRound[:r])+TE+pulseDuration)/deltaT
-        else:
-            ## CHECK  THIS IS CORRECT! 
-             signalDivide[r] = (sum(trRound[:r])+TE+pulseDuration)/deltaT 
+        else: 
+            signalDivide[r] = (sum(trRound[:r])+TE+pulseDuration)/deltaT 
      
             
     '''
@@ -186,45 +176,8 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
         '''
            WATER EXCHANGE
         '''  
-        '''
-        if loop != 0:
-            # loop time added for each iteration
-            repTime = trRound[loop]
-            #Generate array for storing reseidence time for exchange isochromat
-            timeArray = timeArray + np.tile(repTime, [int((perc*noOfIsochromatsX)/100), noOfIsochromatsY, noOfIsochromatsZ, 1])       
-            # same number of random numbers found (one for each isochromat)
-            rands =  np.random.uniform(0,1,[int((perc*noOfIsochromatsX)/100), noOfIsochromatsY,noOfIsochromatsZ, 1])
-            #rands = np.sum(rands, axis=3)/100
-            #cumulative probability of exchange is calculated for each isochromat 
-            # at the given time point 
-                
-            #OLD EXCHANGE
-            
-            cum = 1 - np.exp(-timeArray/res)
-            # exchange points when the cumulative prpobability is greater than the 
-            # random number 
-            exch = rands - cum
-            exch = (exch < 0)
-            exch = exch*1
-            indBlood = np.argwhere(exch == 1)[:,:3]
-            
-            # Chose random isochromat to exchange with
-            randsX = np.random.randint(0, np.size(vecMArrayTissue,0), int(np.size(np.argwhere(exch == 1),0)))
-            randsY = np.random.randint(0, np.size(vecMArrayTissue,1), int(np.size(np.argwhere(exch == 1),0)))
-            randsZ = np.random.randint(0, np.size(vecMArrayTissue,2), int(np.size(np.argwhere(exch == 1),0)))
-            # Swap
-            for change in range(int(np.size(np.argwhere(exch == 1),0))):
-                hold = vecMArrayBlood[indBlood[change,0],indBlood[change,1],indBlood[change,2],:]
-                vecMArrayBlood[indBlood[change,0],indBlood[change,1],indBlood[change,2]] = vecMArrayTissue[randsX[change],randsY[change],randsZ[change],:]
-                vecMArrayTissue[randsX[change],randsY[change],randsZ[change],:] = hold 
-                
-            # reset time array
-            reset = cum - rands
-            reset = (reset < 0)
-            reset = reset*1
-            timeArray = timeArray * reset 
-        '''
-                    # loop time added for each iteration
+        
+        # loop time added for each iteration
         repTime = trRound[loop]
         #Generate array for storing reseidence time for exchange isochromat
         timeArray = timeArray + np.tile(repTime, [int((perc*noOfIsochromatsX)/100), noOfIsochromatsY, noOfIsochromatsZ, 1])       
@@ -355,11 +308,8 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
             #Find the total magitude of M 
             signalNoisy[:,:] = np.transpose(np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2))
             
-        #Save signal  
-        if platform.system() == 'Darwin':         
-            name = '/Users/emmathomson/Desktop/Local/Dictionaries/Dictionary' + dictionaryId +'/' + signalName + str(samp + 1)
-        else:
-            name = '/home/ethomson/Coding/Dictionaries/Dictionary' + dictionaryId +'/' + signalName
+        #Save signal         
+        name = './Dictionaries/Dictionary' + dictionaryId +'/' + signalName + str(samp + 1)
         np.save(name, signalNoisy)
 
     return signalNoisy

@@ -17,8 +17,9 @@ import numpy as np
 def invpulse(vecMArrayTissue, vecMArrayBlood, loop, noOfIsochromatsZ, multi):
     
     #180 pulse for inversion
-    #because the 180 pulse is rubbish multiply value by 0.8
-    ##FIX ME
+    #because the 180 pulse is rubbish multiply value by 0.7
+    #this is extremely crude - need to add either another parameter 
+    # or manually code the IR pulse in the sequence code
     thetaX = np.pi*multi*0.7*np.ones([noOfIsochromatsZ])
     
     rotX = np.zeros([len(thetaX),3,3])

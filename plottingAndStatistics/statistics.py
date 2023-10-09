@@ -1,56 +1,55 @@
- #!/usr/bin/env python3
- # -*- coding: utf-8 -*-
- """------------------------------------------------------------------------
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""------------------------------------------------------------------------
 
-BIG STATS CODE
-- RC AND ICC 
-- BLAND ALTMANN
-- MEAN BAR CHART 
-- T TEST
+Statistical analysis code containing:
+- Repeatability Coefficient (RC) AND intra-class correlation coefficent (ICC) between scan and rescan  
+- Bland-Altmann plots between scan-rescan for each parameter (T1t, T1b, vb, and tb)
+- Mean bar chart for WM and GM across each parameter
+- T-test between WM/GM for each parameter
 
- Author: Emma Thomson
- Year: 2023
- Institution: Centre for Medical Image Computing: University College London
- Email: e.thomson.19@ucl.ac.uk
- ------------------------------------------------------------------------"""
+Author: Emma Thomson
+Year: 2023
+Institution: Centre for Medical Image Computing: University College London
+Email: e.thomson.19@ucl.ac.uk
+------------------------------------------------------------------------"""
 
- ''' -----------------------------PACKAGES--------------------------------- '''
+''' -----------------------------PACKAGES--------------------------------- '''
 
- import numpy as np
- import os
- import glob
- from pydicom import dcmread
- import matplotlib.pyplot as plt   
- import skimage.io
- import skimage.color
- import skimage.filters
- import nibabel as nib
- from skimage.transform import resize
- import shutup
- shutup.please()
- import warnings
- warnings.filterwarnings("ignore")
- import SimpleITK as sitk
- import cv2
- import csv
- import scipy
- import pingouin as pg
- import pandas as pd
+import numpy as np
+import os
+import glob
+import matplotlib.pyplot as plt   
+import skimage.io
+import skimage.color
+import skimage.filters
+import nibabel as nib
+from skimage.transform import resize
+import warnings
+warnings.filterwarnings("ignore")
+import cv2
+import scipy
+import pingouin as pg
+import pandas as pd
 
+plt.rcParams.update({'font.size': 24})
+plt.rcParams['font.family'] = 'Times'
 
- #plt.style.use('bmh')
- plt.rcParams.update({'font.size': 24})
- plt.rcParams['font.family'] = 'Times'
+#go up a folder
+os.chdir("..")
+print(os.getcwd())
 
- ''' -----------------------------FUNCTIONS--------------------------------- '''
+''' -----------------------------FUNCTIONS--------------------------------- '''
 
- def flatten(list_of_lists):
-     if len(list_of_lists) == 0:
-         return list_of_lists
-     if isinstance(list_of_lists[0], list):
-         return flatten(list_of_lists[0]) + flatten(list_of_lists[1:])
-     return list_of_lists[:1] + flatten(list_of_lists[1:])
+#Flatten list of lists into a single list 
+def flatten(list_of_lists):
+    if len(list_of_lists) == 0:
+        return list_of_lists
+    if isinstance(list_of_lists[0], list):
+        return flatten(list_of_lists[0]) + flatten(list_of_lists[1:])
+    return list_of_lists[:1] + flatten(list_of_lists[1:])
 
+#Bland-Altmann plot code 
 def bland_altman_plot(data1, data2, *args, **kwargs):
     data1     = np.asarray(data1)
     data2     = np.asarray(data2)
@@ -61,16 +60,9 @@ def bland_altman_plot(data1, data2, *args, **kwargs):
     CI_low    = md - 1.96*sd
     CI_high   = md + 1.96*sd
     
-    '''
-    plt.scatter(mean, diff, *args, **kwargs)
-    plt.axhline(md,           color='black', linestyle='-')
-    plt.axhline(md + 1.96*sd, color='gray', linestyle='--')
-    plt.axhline(md - 1.96*sd, color='gray', linestyle='--')
-    '''
     return md, sd, mean, diff, CI_low, CI_high
 
-''' -----------------------------FUNCTIONS--------------------------------- '''
-
+#Adds the significance bars and asterisks to the bar chart
 def barplot_annotate_brackets(num1, num2, data, center, height, axnum, yerr=None, dh=.05, barh=.05, fs=None, maxasterix=None):
     """ 
     Annotate barplot with p-values.
@@ -133,569 +125,275 @@ def barplot_annotate_brackets(num1, num2, data, center, height, axnum, yerr=None
     ax[axnum].text(*mid, text, **kwargs)
 
 
- ''' -----------------------------INPUTS--------------------------------- '''
+''' -----------------------------INPUTS--------------------------------- '''
 
- volunteerRange = [22,23,24,25,26,27,28,29,30,31] #inclusive
- #corresponding to the order of the volunteers 
- #numberOfRepeats = 2 #number of scans per HV. 1 scan + 1 repeat = 2 
+#The volunteers you wish to include in the statistical analysis
+#For this code to work each volunteer needs scan and rescan images
+volunteerRange = [1] #list(range(1,11)) #inclusive
 
- #Other imaging factors 
- Regime = 'Red' #Ext
- acqlen = 2000
- number_of_readouts = 4
- TE = '2_LARGE_IRFAT'
- readout = "VDS" #'VDS' 
+#Length of the acquisition
+acqlen = 2000
 
- parNo = 2000
+#Do you use denoised data? 
+denoise = False 
+#if you are denoising then what type of filter do you want to use 
+filt = 'G' #G = gaussian #MF = median filtering
+#if gaussian filter - how much smoothing do you want
+sigma = 0.5 #1 
 
- hydra = False
- denoise = False 
- b1first = True
- ica = False
+#Do you used B1-first matching?
+b1first = True
 
- flip_maps1 = False 
- flip_maps2 = False
+#dictionary folder name 
+dictfolder = 'SliceProfileNew'
 
- #average or rematch 
- rematch = False
+#Display masked images? 
+mask_im = 'yes'
+#Save parameter maps? 
+save_im = 'yes'
+#Segement images?
+seg_im = 'no'
 
- plotVert = True
+#Is the data being shown voxel-wise or regionally
+#if regionally atlas load is True
+atlasLoad = False
 
- #if you want just subcortical atlas then 1, if both cortical and subcortical then 2
- atlasNo = 1
+#Which paramters are regional 
+if atlasLoad is True: 
+    t1t = t1b = vb = taub = True
+    b1plus = rssplus = False
+else: 
+    t1t = t1b = vb = taub = b1plus = rsspluse = False
 
- #Display masked images? 
- mask_im = 'no'
- #Save parameter maps? 
- save_im = 'yes'
- #Segement images?
- seg_im = 'no'
- #bias correction? - DONT THINK THIS IS GOOD
- bias_corr = 'no'
-
-     
- #compare what? #left vs right #white vs gray matter #all components
- subCort = False #Subcortical matching only 
-
- ## TO DO: Add additional identifier here for  name of folder
-
- #number of regions 
- par = 82
-
- #sometimes the maps are the wrong orientation. idk why
- flip_maps = False
-
- #what is being parcellized 
- t1t = False
- t1b = False 
- vb = False
- taub = False
- b1plus = False
-
- #image resolution 
- res_x =  64; res_y = 64;
+#image resolution 
+res_x =  64; res_y = 64;
 
 
- ''' -----------------------------LOAD MAPS--------------------------------- '''
 
- #Number of FA is less than acquisition length because we want to get rid of initial values 
- #initial_bin = 1
- #no_of_FA = acqlen-initial_bin
- #data_offset = 1
- #Number of entries in dictionary (to set array sizes)
- #components = [6,6,6,10,7,6,6,5,11,7] #[6,6,6,10,7,6,6,5,11,7] 
+''' -----------------------------LOAD MAPS--------------------------------- '''
 
- WMmeans = np.zeros([np.size(volunteerRange,0),4,2])
- GMmeans = np.zeros([np.size(volunteerRange,0),4,2])
- WMstd = np.zeros([np.size(volunteerRange,0),4,2])
- GMstd = np.zeros([np.size(volunteerRange,0),4,2])
+#Empty array to occupy for each parameter: number of parameters, 4??, scan and rescan 
+WMmeans = np.zeros([np.size(volunteerRange,0),4,2])
+GMmeans = np.zeros([np.size(volunteerRange,0),4,2])
+WMstd = np.zeros([np.size(volunteerRange,0),4,2])
+GMstd = np.zeros([np.size(volunteerRange,0),4,2])
 
- rep = 1
- 
- #Loop over volunteers
- for volit in range(np.size(volunteerRange,0)):     
-
-     '''--------------------------------READ IN MAPS----------------------------'''
-     
-     #First scan
-     volunteer_no = volunteerRange[volit] + 0.1
-     #Folder Path
-     # Image folder paths 
-     pathToFolder = ('/Users/emmathomson/Dropbox/Scanning_Documents/Scanning_Data/Volunteer' + 
-         str(volunteer_no) + '/' + str(Regime) + str(acqlen) + '_' + str(readout) +
-         str(number_of_readouts) + '_TE' + str(TE))
-     if ica is True:
-         bigpath = (pathToFolder + '/Maps_ICA/') 
-     elif hydra is True:
-         bigpath = (pathToFolder + '/Maps_HYDRA/') 
-     elif b1first is True:
-         bigpath = (pathToFolder + '/Maps/B1first_') 
-     
-     t1tMaps1 = np.rot90(nib.load((bigpath + 'T1_t[ms]_SliceProfileNew.nii.gz'))._dataobj)
-     t1bMaps1 = np.rot90(nib.load((bigpath + 'T1_b[ms]_SliceProfileNew.nii.gz'))._dataobj)
-     taubMaps1 = np.rot90(nib.load((bigpath + 'tau_b[ms]_SliceProfileNew.nii.gz'))._dataobj)
-     vbMaps1 = np.rot90(nib.load((bigpath + 'v_b[%]_SliceProfileNew.nii.gz'))._dataobj)
-     b1Maps1 = np.rot90(nib.load((bigpath + 'B1+_SliceProfileNew.nii.gz'))._dataobj)
-     if denoise is True: 
-         t1tMaps1 = np.rot90(nib.load((bigpath + 'T1_t[ms]_SliceProfileNew_G_S_0.5.nii.gz'))._dataobj)
-         t1bMaps1 = np.rot90(nib.load((bigpath + 'T1_b[ms]_SliceProfileNew_G_S_0.5.nii.gz'))._dataobj)
-         taubMaps1 = np.rot90(nib.load((bigpath + 'tau_b[ms]_SliceProfileNew_G_S_0.5.nii.gz'))._dataobj)
-         vbMaps1 = np.rot90(nib.load((bigpath + 'v_b[%]_SliceProfileNew_G_S_0.5.nii.gz'))._dataobj)
-         b1Maps1 = np.rot90(nib.load((bigpath + 'B1+_SliceProfileNew_G_S_0.5.nii.gz'))._dataobj)
-      
-     #Second scan
-     volunteer_no = volunteerRange[volit] + 0.2
-     pathToFolder = ('/Users/emmathomson/Dropbox/Scanning_Documents/Scanning_Data/Volunteer' + 
-            str(volunteer_no) + '/' + str(Regime) + str(acqlen) + '_' + str(readout) +
-            str(number_of_readouts) + '_TE' + str(TE))
-     if ica is True:
-            bigpath = (pathToFolder + '/Maps_ICA/') 
-     elif hydra is True:
-            bigpath = (pathToFolder + '/Maps_HYDRA/') 
-     elif b1first is True:
-            bigpath = (pathToFolder + '/Maps/B1first_') 
-     
-     t1tMaps2 = np.rot90(nib.load((bigpath + 'T1_t[ms]_SliceProfileNew.nii.gz'))._dataobj)
-     t1bMaps2 = np.rot90(nib.load((bigpath + 'T1_b[ms]_SliceProfileNew.nii.gz'))._dataobj)
-     taubMaps2 = np.rot90(nib.load((bigpath + 'tau_b[ms]_SliceProfileNew.nii.gz'))._dataobj)
-     vbMaps2 = np.rot90(nib.load((bigpath + 'v_b[%]_SliceProfileNew.nii.gz'))._dataobj)
-     b1Maps2 = np.rot90(nib.load((bigpath + 'B1+_SliceProfileNew.nii.gz'))._dataobj)
+#Loop over volunteers
+for volit in range(np.size(volunteerRange,0)):  
+    
+    #Loop over repeats 
+    for rep in range(2):
         
-     if ica is True: 
-         components = [6,6,6,10,7,6,6,5,11,7] 
-         t1tMaps2 = np.rot90(nib.load((bigpath + 'T1_t[ms]_components' + str(components[volit]) + 'SliceProfileNew.nii.gz'))._dataobj)
-         t1bMaps2 = np.rot90(nib.load((bigpath + 'T1_b[ms]_components' + str(components[volit]) + 'SliceProfileNew.nii.gz'))._dataobj)
-         taubMaps2 = np.rot90(nib.load((bigpath + 'tau_b[ms]_components' + str(components[volit]) + 'SliceProfileNew.nii.gz'))._dataobj)
-         vbMaps2 = np.rot90(nib.load((bigpath + 'v_b[%]_components' + str(components[volit]) + 'SliceProfileNew.nii.gz'))._dataobj)
-         b1Maps2 = np.rot90(nib.load((bigpath + 'B1+_components' + str(components[volit]) + 'SliceProfileNew.nii.gz'))._dataobj)
-     if denoise is True:
-         t1tMaps2 = np.rot90(nib.load((bigpath + 'T1_t[ms]_SliceProfileNew_G_S_0.5.nii.gz'))._dataobj)
-         t1bMaps2 = np.rot90(nib.load((bigpath + 'T1_b[ms]_SliceProfileNew_G_S_0.5.nii.gz'))._dataobj)
-         taubMaps2 = np.rot90(nib.load((bigpath + 'tau_b[ms]_SliceProfileNew_G_S_0.5.nii.gz'))._dataobj)
-         vbMaps2 = np.rot90(nib.load((bigpath + 'v_b[%]_SliceProfileNew_G_S_0.5.nii.gz'))._dataobj)
-         b1Maps2 = np.rot90(nib.load((bigpath + 'B1+_SliceProfileNew_G_S_0.5.nii.gz'))._dataobj)
+        #gives the 0.1 and 0.2 for scan and repeat
+        repit = (rep+1)/10
          
-     
-     if flip_maps1 is True: 
-         t1tMaps1 = np.fliplr(t1tMaps1)
-         t1bMaps1 = np.fliplr(t1bMaps1)
-         taubMaps1 = np.fliplr(taubMaps1)
-         vbMaps1 = np.fliplr(vbMaps1)
-         b1Maps1 = np.fliplr(b1Maps1)
-     if flip_maps2 is True:
-         t1tMaps2 = np.fliplr(t1tMaps2)
-         t1bMaps2 = np.fliplr(t1bMaps2)
-         taubMaps2 = np.fliplr(taubMaps2)
-         vbMaps2 = np.fliplr(vbMaps2)
-         b1Maps2 = np.fliplr(b1Maps2)
-      
+        volunteer_no = volunteerRange[volit] + repit
+        
+        '''--------------------------------READ IN MAPS----------------------------'''
 
-     '''--------------------------------RESIZE QMAPS----------------------------'''
+        #Folder Path
+        #Image folder paths 
+        pathToFolder = ('./sampleData/Volunteer' + str(volunteer_no) + '/MRF')
+        if b1first is True:
+            bigpath = (pathToFolder + '/Maps/B1first_') 
+        else: 
+            bigpath = (pathToFolder + '/Maps') 
+    
+        t1tMaps = np.rot90(nib.load((bigpath + 'T1_t[ms]_' + dictfolder + '.nii.gz'))._dataobj)
+        t1bMaps = np.rot90(nib.load((bigpath + 'T1_b[ms]_' + dictfolder + '.nii.gz'))._dataobj)
+        taubMaps = np.rot90(nib.load((bigpath + 'tau_b[ms]_' + dictfolder + '.nii.gz'))._dataobj)
+        vbMaps = np.rot90(nib.load((bigpath + 'v_b[%]_' + dictfolder + '.nii.gz'))._dataobj)
+        b1Maps = np.rot90(nib.load((bigpath + 'B1+_' + dictfolder + '.nii.gz'))._dataobj)
+        if denoise is True: 
+            if filt == 'G':
+                t1tMaps = np.rot90(nib.load((bigpath + 'T1_t[ms]_' + dictfolder + '_G_S_' + str(sigma) + '.nii.gz'))._dataobj)
+                t1bMaps = np.rot90(nib.load((bigpath + 'T1_b[ms]_' + dictfolder + '_G_S_' + str(sigma) + '.nii.gz'))._dataobj)
+                taubMaps = np.rot90(nib.load((bigpath + 'tau_b[ms]_' + dictfolder + '_G_S_' + str(sigma) + '.nii.gz'))._dataobj)
+                vbMaps = np.rot90(nib.load((bigpath + 'v_b[%]_' + dictfolder + '_G_S_' + str(sigma) + '.nii.gz'))._dataobj)
+                b1Maps = np.rot90(nib.load((bigpath + 'B1+_' + dictfolder + '_G_S_' + str(sigma) + '.nii.gz'))._dataobj)
+            elif filt == 'MF':
+                t1tMaps = np.rot90(nib.load((bigpath + 'T1_t[ms]_' + dictfolder + '_MF_S_3.nii.gz'))._dataobj)
+                t1bMaps = np.rot90(nib.load((bigpath + 'T1_b[ms]_' + dictfolder + '_MF_S_3.nii.gz'))._dataobj)
+                taubMaps = np.rot90(nib.load((bigpath + 'tau_b[ms]_' + dictfolder + '_MF_S_3.nii.gz'))._dataobj)
+                vbMaps = np.rot90(nib.load((bigpath + 'v_b[%]_' + dictfolder + '_MF_S_3.nii.gz'))._dataobj)
+                b1Maps = np.rot90(nib.load((bigpath + 'B1+_' + dictfolder + '_MF_S_3.nii.gz'))._dataobj)
      
-     x,y = res_x, res_y
-     
-     t1tMaps_resized1 = resize(t1tMaps1, (x, y), anti_aliasing=True)
-     t1bMaps_resized1 = resize(t1bMaps1, (x, y), anti_aliasing=True)
-     taubMaps_resized1 = resize(taubMaps1, (x, y), anti_aliasing=True)
-     vbMaps_resized1 = resize(vbMaps1, (x, y), anti_aliasing=True)
-     b1Maps_resized1 = resize(b1Maps1, (x, y), anti_aliasing=True)
-     t1tMaps_resized2 = resize(t1tMaps2, (x, y), anti_aliasing=True)
-     t1bMaps_resized2= resize(t1bMaps2, (x, y), anti_aliasing=True)
-     taubMaps_resized2 = resize(taubMaps2, (x, y), anti_aliasing=True)
-     vbMaps_resized2 = resize(vbMaps2, (x, y), anti_aliasing=True)
-     b1Maps_resized2 = resize(b1Maps2, (x, y), anti_aliasing=True)
-     #m0Maps_resized = resize(m0Maps, (x, y), anti_aliasing=True)
-     
-     ''' -----------------------MASK BRAIN-------------------------- '''
-     
-     #First scan
-     volunteer_no = volunteerRange[volit] + 0.1
-     rr = '*brain_mask.nii.gz' 
-     for filename in glob.glob(os.path.join(str('/Users/emmathomson/Dropbox/Scanning_Documents/Scanning_Data/Volunteer' + str(volunteer_no) + '/Mask_Images/' + rr))):
-         
-         mask_load = nib.load(filename)
-         mask = np.flipud(np.array(mask_load.dataobj).T)
-         
-         mask_resized = cv2.resize(mask, dsize=(res_x, res_y), interpolation=cv2.INTER_NEAREST)
-         #mask = mask.resize([res_x, res_y])
-     
-         gray_image =  mask_resized #skimage.color.rgb2gray(mask_resized)
-         #blurred_image = skimage.filters.gaussian(gray_image, sigma=1.0)
-         histogram, bin_edges = np.histogram(gray_image, bins=256, range=(0.0, 1.0))
-         t = 3e-05
-         binary_mask = mask_resized > t
-         binary_mask = binary_mask.astype('uint8') #int(binary_mask == 'True')
-         #binary_mask = abs(np.int64(binary_mask)-1)
 
-       
-     seg_path = '/Users/emmathomson/Dropbox/Scanning_Documents/Scanning_Data/Volunteer' + str(volunteer_no) + '/Mask_Images/Segmented/'
-     
-     segCSF = 0
-     if volunteer_no ==6: 
-         segCSF = 5
-     elif volunteer_no ==3: 
-         segCSF = 2
-     elif volunteer_no ==8: 
-         segCSF = 5
-     
-     #Remove any CSF component
-     segCSF = (seg_path + 'T2_pve_' + str(segCSF) + '.nii.gz')
-     fpath =  segCSF
-     seg_load_CSF = nib.load(fpath) 
-     segCSF = np.array(seg_load_CSF.dataobj)
-     if volunteer_no != 17.1:
-         segCSF = (np.rot90(segCSF))
-     segCSF= resize(segCSF, (res_x, res_y),
-                    anti_aliasing=False)
-     try:
-         grey_image = skimage.color.rgb2grey(segCSF)
-     except:
-         grey_image = segCSF
-     histogram, bin_edges = np.histogram(grey_image, bins=256, range=(0.0, 1.0))
-     t = np.max(segCSF)*0.1
-     binary_seg_mask = segCSF > t
-     binary_seg_mask_CSF1 = binary_seg_mask.astype('uint8')
-     
-     binary_mask1 = binary_mask-binary_seg_mask_CSF1*binary_mask
-     
-     #Second scan
-     volunteer_no = volunteerRange[volit] + 0.2
-     rr = '*brain_mask.nii.gz' 
-     for filename in glob.glob(os.path.join(str('/Users/emmathomson/Dropbox/Scanning_Documents/Scanning_Data/Volunteer' + str(volunteer_no) + '/Mask_Images/' + rr))):
-         
-         mask_load = nib.load(filename)
-         mask = np.flipud(np.array(mask_load.dataobj).T)
-         
-         mask_resized = cv2.resize(mask, dsize=(res_x, res_y), interpolation=cv2.INTER_NEAREST)
-         #mask = mask.resize([res_x, res_y])
-     
-         gray_image =  mask_resized #skimage.color.rgb2gray(mask_resized)
-         #blurred_image = skimage.filters.gaussian(gray_image, sigma=1.0)
-         histogram, bin_edges = np.histogram(gray_image, bins=256, range=(0.0, 1.0))
-         t = 3e-05
-         binary_mask = mask_resized > t
-         binary_mask = binary_mask.astype('uint8') #int(binary_mask == 'True')
-         #binary_mask = abs(np.int64(binary_mask)-1)
+        '''--------------------------------RESIZE QMAPS----------------------------'''
+        
+        x,y = res_x, res_y
+        
+        t1tMaps_resized = resize(t1tMaps, (x, y), anti_aliasing=True)
+        t1bMaps_resized = resize(t1bMaps, (x, y), anti_aliasing=True)
+        taubMaps_resized = resize(taubMaps, (x, y), anti_aliasing=True)
+        vbMaps_resized = resize(vbMaps, (x, y), anti_aliasing=True)
+        b1Maps_resized = resize(b1Maps, (x, y), anti_aliasing=True)
+        
+        ''' -----------------------MASK BRAIN-------------------------- '''
 
-       
-     seg_path = '/Users/emmathomson/Dropbox/Scanning_Documents/Scanning_Data/Volunteer' + str(volunteer_no) + '/Mask_Images/Segmented/'
-     
-     segCSF = 0
-     if volunteer_no ==6: 
-         segCSF = 5
-     elif volunteer_no ==3: 
-         segCSF = 2
-     elif volunteer_no ==8: 
-         segCSF = 5
-     
-     #Remove any CSF component
-     segCSF = (seg_path + 'T2_pve_' + str(segCSF) + '.nii.gz')
-     fpath =  segCSF
-     seg_load_CSF = nib.load(fpath) 
-     segCSF = np.array(seg_load_CSF.dataobj)
-     if volunteer_no != 17.1:
-         segCSF = (np.rot90(segCSF))
-     segCSF= resize(segCSF, (res_x, res_y),
-                    anti_aliasing=False)
-     try:
-         grey_image = skimage.color.rgb2grey(segCSF)
-     except:
-         grey_image = segCSF
-     histogram, bin_edges = np.histogram(grey_image, bins=256, range=(0.0, 1.0))
-     t = np.max(segCSF)*0.1
-     binary_seg_mask = segCSF > t
-     binary_seg_mask_CSF2 = binary_seg_mask.astype('uint8')
-     
-     binary_mask2 = binary_mask-binary_seg_mask_CSF2*binary_mask
-     
-     t1tMaps_resized1 = t1tMaps_resized1*binary_mask1
-     t1bMaps_resized1 = t1bMaps_resized1*binary_mask1
-     taubMaps_resized1 = taubMaps_resized1*binary_mask1
-     vbMaps_resized1 = vbMaps_resized1*binary_mask1
-     b1Maps_resized1 = b1Maps_resized1*binary_mask1
-     t1tMaps_resized2 = t1tMaps_resized2*binary_mask2
-     t1bMaps_resized2 = t1bMaps_resized2*binary_mask2
-     taubMaps_resized2 = taubMaps_resized2*binary_mask2
-     vbMaps_resized2 = vbMaps_resized2*binary_mask2
-     b1Maps_resized2 = b1Maps_resized2*binary_mask2
-     #m0Maps_resized = m0Maps_resized*binary_mask
-     
-     #nan all zero values
-     t1tMaps_resized1[t1tMaps_resized1==0] = np.nan
-     t1bMaps_resized1[t1bMaps_resized1==0] = np.nan
-     taubMaps_resized1[taubMaps_resized1==0] = np.nan
-     vbMaps_resized1[vbMaps_resized1 ==0] = np.nan
-     b1Maps_resized1[b1Maps_resized1==0] = np.nan
-     t1tMaps_resized2[t1tMaps_resized2==0] = np.nan
-     t1bMaps_resized2[t1bMaps_resized2==0] = np.nan
-     taubMaps_resized2[taubMaps_resized2==0] = np.nan
-     vbMaps_resized2[vbMaps_resized2 ==0] = np.nan
-     b1Maps_resized2[b1Maps_resized2==0] = np.nan
-     #m0Maps_resized[m0Maps_resized==0] = np.nan
+        rr = '*brain_mask.nii.gz' 
+        for filename in glob.glob(os.path.join(str('./sampleData/Volunteer' + str(volunteer_no) + '/Mask_Images/' + rr))):
+            
+            mask_load = nib.load(filename)
+            mask = np.flipud(np.array(mask_load.dataobj).T)
+            
+            mask_resized = cv2.resize(mask, dsize=(res_x, res_y), interpolation=cv2.INTER_NEAREST)
+            #mask = mask.resize([res_x, res_y])
+        
+            gray_image =  mask_resized #skimage.color.rgb2gray(mask_resized)
+            #blurred_image = skimage.filters.gaussian(gray_image, sigma=1.0)
+            histogram, bin_edges = np.histogram(gray_image, bins=256, range=(0.0, 1.0))
+            t = 3e-05
+            binary_mask = mask_resized > t
+            binary_mask = binary_mask.astype('uint8') #int(binary_mask == 'True')
+            #binary_mask = abs(np.int64(binary_mask)-1)
+    
+          
+        seg_path = './sampleData/Volunteer' + str(volunteer_no) + '/Mask_Images/Segmented/'
+        
+        segCSF = 0
+        
+        #Remove any CSF component
+        segCSF = (seg_path + 'T2_pve_' + str(segCSF) + '.nii.gz')
+        fpath =  segCSF
+        seg_load_CSF = nib.load(fpath) 
+        segCSF = np.array(seg_load_CSF.dataobj)
+        if volunteer_no != 17.1:
+            segCSF = (np.rot90(segCSF))
+        segCSF= resize(segCSF, (res_x, res_y),
+                       anti_aliasing=False)
+        try:
+            grey_image = skimage.color.rgb2grey(segCSF)
+        except:
+            grey_image = segCSF
+        histogram, bin_edges = np.histogram(grey_image, bins=256, range=(0.0, 1.0))
+        t = np.max(segCSF)*0.1
+        binary_seg_mask = segCSF > t
+        binary_seg_mask_CSF = binary_seg_mask.astype('uint8')
+        
+        binary_mask = binary_mask-binary_seg_mask_CSF*binary_mask
+        
+        t1tMaps_resized = t1tMaps_resized*binary_mask
+        t1bMaps_resized = t1bMaps_resized*binary_mask
+        taubMaps_resized = taubMaps_resized*binary_mask
+        vbMaps_resized = vbMaps_resized*binary_mask
+        b1Maps_resized = b1Maps_resized*binary_mask
+    
+        #nan all zero values
+        t1tMaps_resized[t1tMaps_resized==0] = np.nan
+        t1bMaps_resized[t1bMaps_resized==0] = np.nan
+        taubMaps_resized[taubMaps_resized==0] = np.nan
+        vbMaps_resized[vbMaps_resized ==0] = np.nan
+        b1Maps_resized[b1Maps_resized==0] = np.nan
 
-     '''
-     fig,ax = plt.subplots()
-     plt.imshow(t1tMaps_resized1)
-     fig,ax = plt.subplots()
-     plt.imshow(t1tMaps_resized2)
-     '''
-     ''' --------------------------READ IN ATLAS------------------------------ '''  
+        ''' --------------------------READ IN ATLAS------------------------------ '''  
+    
+        subAtlasFile = ('./sampleData/Volunteer' + str(volunteer_no) +'/Anatomy_Seg/outputAtlas.nii.gz')
+        
+        subAtlasLoad = nib.load(subAtlasFile)
+        subAtlas = np.array(subAtlasLoad.dataobj)
+        
+        atlasSliceSub = np.round((np.flipud(subAtlas[:,:,int(138/2)].T)),0)
+        
+        atlas = atlasSliceSub
+        
+        atlas_resize_s = cv2.resize(atlas, dsize=(res_x, res_y), interpolation=cv2.INTER_NEAREST)    
+    
+        gmMaskHold = 2*atlas_resize_s/2
+    
+        #Remove WM from mask
+        gmMaskHold[gmMaskHold==2] = 0 
+        gmMaskHold[gmMaskHold==41] = 0 
+        gmMaskHold[gmMaskHold<1000] = 0 
+        
+        gmMaskHold[gmMaskHold>0] = 1 
+        gmMaskHold = gmMaskHold*(1-binary_seg_mask_CSF)
+    
+        wmMaskHold = np.zeros([res_x, res_y])
+        #Remove WM from mask
+        wmMaskHold[atlas_resize_s==2] = 1
+        wmMaskHold[atlas_resize_s==41] = 1
+        wmMaskHold = wmMaskHold*(1-binary_seg_mask_CSF)
+    
+        
+        ''' -----------------------------PLOTTING--------------------------------- '''
+        
+        grey_t1t_mask = gmMaskHold*t1tMaps_resized
+        grey_t1b_mask = gmMaskHold*t1bMaps_resized
+        grey_taub_mask = gmMaskHold*taubMaps_resized
+        grey_vb_mask = gmMaskHold*vbMaps_resized
+        
+        #nan all zero values
+        grey_t1t_mask[grey_t1t_mask==0] = np.nan
+        grey_t1b_mask[grey_t1b_mask==0] = np.nan
+        grey_taub_mask[grey_taub_mask==0] = np.nan
+        grey_vb_mask[grey_vb_mask ==0] = np.nan
+    
+        #grey matter averages and std
+        grey_t1t_mean = np.nanmedian(grey_t1t_mask[np.nonzero(grey_t1t_mask)])
+        grey_t1t_std = np.std(grey_t1t_mask[np.nonzero(grey_t1t_mask)])
+        grey_t1t_mask = grey_t1t_mask[~np.isnan(grey_t1t_mask)]
+        grey_t1t_iqr = scipy.stats.iqr(grey_t1t_mask[np.nonzero(grey_t1t_mask)])
+        
+        grey_t1b_mean = np.nanmean(grey_t1b_mask[np.nonzero(grey_t1b_mask)])
+        grey_t1b_std = np.nanstd(grey_t1b_mask[np.nonzero(grey_t1b_mask)])
+        grey_t1b_mask = grey_t1b_mask[~np.isnan(grey_t1b_mask)]
+        grey_t1b_iqr = scipy.stats.iqr(grey_t1b_mask[np.nonzero(grey_t1b_mask)])
+        
+        grey_taub_mean = np.nanmean(grey_taub_mask[np.nonzero(grey_taub_mask)])
+        grey_taub_std = np.nanstd(grey_taub_mask[np.nonzero(grey_taub_mask)])
+        grey_taub_mask = grey_taub_mask[~np.isnan(grey_taub_mask)]
+        grey_taub_iqr = scipy.stats.iqr(grey_taub_mask[np.nonzero(grey_taub_mask)])
+    
+        grey_vb_mean = np.nanmean(grey_vb_mask[np.nonzero(grey_vb_mask)])
+        grey_vb_std = np.nanstd(grey_vb_mask[np.nonzero(grey_vb_mask)])
+        grey_vb_mask = grey_vb_mask[~np.isnan(grey_vb_mask)]
+        grey_vb_iqr = scipy.stats.iqr(grey_vb_mask[np.nonzero(grey_vb_mask)])
+    
+        #white matter masks
+        white_t1t_mask = wmMaskHold*t1tMaps_resized
+        white_t1b_mask = wmMaskHold*t1bMaps_resized
+        white_taub_mask = wmMaskHold*taubMaps_resized
+        white_vb_mask = wmMaskHold*vbMaps_resized
+    
+        #nan all zero values
+        white_t1t_mask[white_t1t_mask==0] = np.nan
+        white_t1b_mask[white_t1b_mask==0] = np.nan
+        white_taub_mask[white_taub_mask==0] = np.nan
+        white_vb_mask[white_vb_mask==0] = np.nan
+        
+        #white matter averages and std
+        white_t1t_mean = np.nanmean(white_t1t_mask[np.nonzero(white_t1t_mask)])
+        white_t1t_std = np.nanstd(white_t1t_mask[np.nonzero(white_t1t_mask)])
+        white_t1t_mask = white_t1t_mask[~np.isnan(white_t1t_mask)]
+        white_t1t_iqr = scipy.stats.iqr(white_t1t_mask[np.nonzero(white_t1t_mask)])
+        
+        white_t1b_mean = np.nanmean(white_t1b_mask[np.nonzero(white_t1b_mask)])
+        white_t1b_std = np.nanstd(white_t1b_mask[np.nonzero(white_t1b_mask)])
+        white_t1b_mask = white_t1b_mask[~np.isnan(white_t1b_mask)]
+        white_t1b_iqr = scipy.stats.iqr(white_t1b_mask[np.nonzero(white_t1b_mask)])
+        
+        white_taub_mean = np.nanmean(white_taub_mask[np.nonzero(white_taub_mask)])
+        white_taub_std = np.nanstd(white_taub_mask[np.nonzero(white_taub_mask)])
+        white_taub_mask = white_taub_mask[~np.isnan(white_taub_mask)]
+        white_taub_iqr = scipy.stats.iqr(white_taub_mask[np.nonzero(white_taub_mask)])
+    
+        white_vb_mean = np.nanmean(white_vb_mask[np.nonzero(white_vb_mask)])
+        white_vb_std = np.nanstd(white_vb_mask[np.nonzero(white_vb_mask)])
+        white_vb_mask = white_vb_mask[~np.isnan(white_vb_mask)]
+        white_vb_iqr = scipy.stats.iqr(white_vb_mask[np.nonzero(white_vb_mask)])
+        
+        WMmeans[volit,:,rep] = np.array([white_t1t_mean, white_t1b_mean, white_vb_mean, white_taub_mean])      
+        GMmeans[volit,:,rep] = np.array([grey_t1t_mean, grey_t1b_mean, grey_vb_mean, grey_taub_mean]) 
+        WMstd[volit,:,rep] = np.array([white_t1t_std, white_t1b_std, white_vb_std, white_taub_std])  
+        GMstd[volit,:,rep] = np.array([grey_t1t_std, grey_t1b_std, grey_vb_std, grey_taub_std])
 
-     #First scan 
-     volunteer_no = volunteerRange[volit] + 0.1
-     #subAtlasFile = ('/Users/emmathomson/Dropbox/Scanning_Documents/Scanning_Data/Volunteer' + 
-     #    str(volunteer_no) +'/Anatomy_Seg/outputAtlas.nii.gz')
-     subAtlasFile = ('/Users/emmathomson/Dropbox/Scanning_Documents/Scanning_Data/Volunteer' + 
-         str(volunteer_no) +'/Anatomy_Seg/outputAtlas.nii.gz')
-     
-     subAtlasLoad = nib.load(subAtlasFile)
-     subAtlas = np.array(subAtlasLoad.dataobj)
-     
-     atlasSliceSub = np.round((np.flipud(subAtlas[:,:,int(138/2)].T)),0)
-     
-     if atlasNo == 2:
-         
-         #atlasSliceSub = scipy.signal.medfilt(atlasSliceSub, kernel_size=7)
-         atlasSliceSub[atlasSliceSub == 0] = np.nan
-         #Remove grey matter segs to overlay with cortical segs 
-         atlasSliceSub[atlasSliceSub==2] = 1
-         atlasSliceSub[atlasSliceSub==13] = 12
-         
-         cortAtlasFile = ('/Users/emmathomson/Dropbox/Scanning_Documents/Scanning_Data/Volunteer' + 
-             str(volunteer_no) +'/Anatomy_Seg/outputAtlas-cort.nii.gz')
-         
-         cortAtlasLoad = nib.load(cortAtlasFile)
-         cortAtlas = np.array(cortAtlasLoad.dataobj)
-         atlasSliceCort = np.round((np.flipud(cortAtlas[:,:,int(138/2)].T)),0)
-         #atlasSliceCort = scipy.signal.medfilt(atlasSliceCort, kernel_size=5)
-         #To remove overlap with atlasSliceSub segs
-         atlasSliceCort += 20
-         
-         atlas = atlasSliceSub + atlasSliceCort
-         
-     else: 
-         atlas = atlasSliceSub
-     
-     #atlas = scipy.signal.medfilt(atlas, kernel_size=9)
-     atlas_resize_s1 = cv2.resize(atlas, dsize=(res_x, res_y), interpolation=cv2.INTER_NEAREST)
-     
-     #Second scan 
-     volunteer_no = volunteerRange[volit] + 0.2
-     #subAtlasFile = ('/Users/emmathomson/Dropbox/Scanning_Documents/Scanning_Data/Volunteer' + 
-     #    str(volunteer_no) +'/Anatomy_Seg/outputAtlas.nii.gz')
-     subAtlasFile = ('/Users/emmathomson/Dropbox/Scanning_Documents/Scanning_Data/Volunteer' + 
-         str(volunteer_no) +'/Anatomy_Seg/outputAtlas.nii.gz')
-     
-     subAtlasLoad = nib.load(subAtlasFile)
-     subAtlas = np.array(subAtlasLoad.dataobj)
-     
-     atlasSliceSub = np.round((np.flipud(subAtlas[:,:,int(138/2)].T)),0)
-     
-     if atlasNo == 2:
-         
-         #atlasSliceSub = scipy.signal.medfilt(atlasSliceSub, kernel_size=7)
-         atlasSliceSub[atlasSliceSub == 0] = np.nan
-         #Remove grey matter segs to overlay with cortical segs 
-         atlasSliceSub[atlasSliceSub==2] = 1
-         atlasSliceSub[atlasSliceSub==13] = 12
-         
-         cortAtlasFile = ('/Users/emmathomson/Dropbox/Scanning_Documents/Scanning_Data/Volunteer' + 
-             str(volunteer_no) +'/Anatomy_Seg/outputAtlas-cort.nii.gz')
-         
-         cortAtlasLoad = nib.load(cortAtlasFile)
-         cortAtlas = np.array(cortAtlasLoad.dataobj)
-         atlasSliceCort = np.round((np.flipud(cortAtlas[:,:,int(138/2)].T)),0)
-         #atlasSliceCort = scipy.signal.medfilt(atlasSliceCort, kernel_size=5)
-         #To remove overlap with atlasSliceSub segs
-         atlasSliceCort += 20
-         
-         atlas = atlasSliceSub + atlasSliceCort
-         
-     else: 
-         atlas = atlasSliceSub
-     
-     #atlas = scipy.signal.medfilt(atlas, kernel_size=9)
-     atlas_resize_s2 = cv2.resize(atlas, dsize=(res_x, res_y), interpolation=cv2.INTER_NEAREST)
-
-     gmMaskHold1 = 2*atlas_resize_s1/2
-     gmMaskHold2 = 2*atlas_resize_s2/2
-     
-     #Remove WM from mask
-     gmMaskHold1[gmMaskHold1==2] = 0 
-     gmMaskHold1[gmMaskHold1==41] = 0 
-     gmMaskHold1[gmMaskHold1<1000] = 0 
-     
-     gmMaskHold2[gmMaskHold2==2] = 0 
-     gmMaskHold2[gmMaskHold2==41] = 0 
-     gmMaskHold2[gmMaskHold2<1000] = 0 
-     
-     gmMaskHold1[gmMaskHold1>0] = 1 
-     gmMaskHold1 = gmMaskHold1*(1-binary_seg_mask_CSF1)
-
-     gmMaskHold2[gmMaskHold2>0] = 1 
-     gmMaskHold2 = gmMaskHold2*(1-binary_seg_mask_CSF2)
-     
-     
-     wmMaskHold1 = np.zeros([res_x, res_y])
-     #Remove WM from mask
-     wmMaskHold1[atlas_resize_s1==2] = 1
-     wmMaskHold1[atlas_resize_s1==41] = 1
-     wmMaskHold1 = wmMaskHold1*(1-binary_seg_mask_CSF1)
-     
-     wmMaskHold2 = np.zeros([res_x, res_y])
-     #Remove WM from mask
-     wmMaskHold2[atlas_resize_s2==2] = 1
-     wmMaskHold2[atlas_resize_s2==41] = 1
-     wmMaskHold2 = wmMaskHold2*(1-binary_seg_mask_CSF2)
-     
-     ''' -----------------------------PLOTTING--------------------------------- '''
-     
-     grey_t1t_mask1 = gmMaskHold1*t1tMaps_resized1
-     grey_t1b_mask1 = gmMaskHold1*t1bMaps_resized1
-     grey_taub_mask1 = gmMaskHold1*taubMaps_resized1
-     grey_vb_mask1 = gmMaskHold1*vbMaps_resized1
-     
-     grey_t1t_mask2 = gmMaskHold2*t1tMaps_resized2
-     grey_t1b_mask2 = gmMaskHold2*t1bMaps_resized2
-     grey_taub_mask2 = gmMaskHold2*taubMaps_resized2
-     grey_vb_mask2 = gmMaskHold2*vbMaps_resized2
-     #grey_b1_mask = binary_seg_gm*b1Maps
-     
-     #nan all zero values
-     grey_t1t_mask1[grey_t1t_mask1==0] = np.nan
-     grey_t1b_mask1[grey_t1b_mask1==0] = np.nan
-     grey_taub_mask1[grey_taub_mask1==0] = np.nan
-     grey_vb_mask1[grey_vb_mask1 ==0] = np.nan
-     
-     grey_t1t_mask2[grey_t1t_mask2==0] = np.nan
-     grey_t1b_mask2[grey_t1b_mask2==0] = np.nan
-     grey_taub_mask2[grey_taub_mask2==0] = np.nan
-     grey_vb_mask2[grey_vb_mask2 ==0] = np.nan
-     
-     #grey matter averages and std
-     grey_t1t_mean1 = np.nanmedian(grey_t1t_mask1[np.nonzero(grey_t1t_mask1)])
-     grey_t1t_std1 = np.std(grey_t1t_mask1[np.nonzero(grey_t1t_mask1)])
-     grey_t1t_mask1 = grey_t1t_mask1[~np.isnan(grey_t1t_mask1)]
-     grey_t1t_iqr1 = scipy.stats.iqr(grey_t1t_mask1[np.nonzero(grey_t1t_mask1)])
-     
-     grey_t1t_mean2 = np.nanmean(grey_t1t_mask2[np.nonzero(grey_t1t_mask2)])
-     grey_t1t_std2 = np.nanstd(grey_t1t_mask2[np.nonzero(grey_t1t_mask2)])
-     grey_t1t_mask2 = grey_t1t_mask2[~np.isnan(grey_t1t_mask2)]
-     grey_t1t_iqr2 = scipy.stats.iqr(grey_t1t_mask2[np.nonzero(grey_t1t_mask2)])
-     
-     grey_t1b_mean1 = np.nanmean(grey_t1b_mask1[np.nonzero(grey_t1b_mask1)])
-     grey_t1b_std1 = np.nanstd(grey_t1b_mask1[np.nonzero(grey_t1b_mask1)])
-     grey_t1b_mask1 = grey_t1b_mask1[~np.isnan(grey_t1b_mask1)]
-     grey_t1b_iqr1 = scipy.stats.iqr(grey_t1b_mask1[np.nonzero(grey_t1b_mask1)])
-     
-     grey_t1b_mean2 = np.nanmean(grey_t1b_mask2[np.nonzero(grey_t1b_mask2)])
-     grey_t1b_std2 = np.nanstd(grey_t1b_mask2[np.nonzero(grey_t1b_mask2)])
-     grey_t1b_mask2 = grey_t1b_mask2[~np.isnan(grey_t1b_mask2)]
-     grey_t1b_iqr2 = scipy.stats.iqr(grey_t1b_mask2[np.nonzero(grey_t1b_mask2)])
-     
-     grey_taub_mean1 = np.nanmean(grey_taub_mask1[np.nonzero(grey_taub_mask1)])
-     grey_taub_std1 = np.nanstd(grey_taub_mask1[np.nonzero(grey_taub_mask1)])
-     grey_taub_mask1 = grey_taub_mask1[~np.isnan(grey_taub_mask1)]
-     grey_taub_iqr1 = scipy.stats.iqr(grey_taub_mask1[np.nonzero(grey_taub_mask1)])
-     
-     grey_taub_mean2 = np.nanmean(grey_taub_mask2[np.nonzero(grey_taub_mask2)])
-     grey_taub_std2 = np.nanstd(grey_taub_mask2[np.nonzero(grey_taub_mask2)])
-     grey_taub_mask2 = grey_taub_mask2[~np.isnan(grey_taub_mask2)]
-     grey_taub_iqr2 = scipy.stats.iqr(grey_taub_mask2[np.nonzero(grey_taub_mask2)])
-     
-     grey_vb_mean1 = np.nanmean(grey_vb_mask1[np.nonzero(grey_vb_mask1)])
-     grey_vb_std1 = np.nanstd(grey_vb_mask1[np.nonzero(grey_vb_mask1)])
-     grey_vb_mask1 = grey_vb_mask1[~np.isnan(grey_vb_mask1)]
-     grey_vb_iqr1 = scipy.stats.iqr(grey_vb_mask1[np.nonzero(grey_vb_mask1)])
-     
-     grey_vb_mean2 = np.nanmean(grey_vb_mask2[np.nonzero(grey_vb_mask2)])
-     grey_vb_std2 = np.nanstd(grey_vb_mask2[np.nonzero(grey_vb_mask2)])
-     grey_vb_mask2 = grey_vb_mask2[~np.isnan(grey_vb_mask2)]
-     grey_vb_iqr2 = scipy.stats.iqr(grey_vb_mask2[np.nonzero(grey_vb_mask2)])
-
-
-     #white matter masks
-     white_t1t_mask1 = wmMaskHold1*t1tMaps_resized1
-     white_t1b_mask1 = wmMaskHold1*t1bMaps_resized1
-     white_taub_mask1 = wmMaskHold1*taubMaps_resized1
-     white_vb_mask1 = wmMaskHold1*vbMaps_resized1  
-     
-     white_t1t_mask2 = wmMaskHold2*t1tMaps_resized2
-     white_t1b_mask2 = wmMaskHold2*t1bMaps_resized2
-     white_taub_mask2 = wmMaskHold2*taubMaps_resized2
-     white_vb_mask2 = wmMaskHold2*vbMaps_resized2
-     #white_b1_mask = wmMaskHold*b1Maps
-
-     #nan all zero values
-     white_t1t_mask1[white_t1t_mask1==0] = np.nan
-     white_t1b_mask1[white_t1b_mask1==0] = np.nan
-     white_taub_mask1[white_taub_mask1==0] = np.nan
-     white_vb_mask1[white_vb_mask1==0] = np.nan
-     
-     white_t1t_mask2[white_t1t_mask2==0] = np.nan
-     white_t1b_mask2[white_t1b_mask2==0] = np.nan
-     white_taub_mask2[white_taub_mask2==0] = np.nan
-     white_vb_mask2[white_vb_mask2==0] = np.nan
-     
-     #white matter averages and std
-     white_t1t_mean1 = np.nanmean(white_t1t_mask1[np.nonzero(white_t1t_mask1)])
-     white_t1t_std1 = np.nanstd(white_t1t_mask1[np.nonzero(white_t1t_mask1)])
-     white_t1t_mask1 = white_t1t_mask1[~np.isnan(white_t1t_mask1)]
-     white_t1t_iqr1 = scipy.stats.iqr(white_t1t_mask1[np.nonzero(white_t1t_mask1)])
-     
-     white_t1t_mean2 = np.nanmean(white_t1t_mask2[np.nonzero(white_t1t_mask2)])
-     white_t1t_std2 = np.nanstd(white_t1t_mask2[np.nonzero(white_t1t_mask2)])
-     white_t1t_mask2 = white_t1t_mask2[~np.isnan(white_t1t_mask2)]
-     white_t1t_iqr2 = scipy.stats.iqr(white_t1t_mask2[np.nonzero(white_t1t_mask2)])
-     
-     white_t1b_mean1 = np.nanmean(white_t1b_mask1[np.nonzero(white_t1b_mask1)])
-     white_t1b_std1 = np.nanstd(white_t1b_mask1[np.nonzero(white_t1b_mask1)])
-     white_t1b_mask1 = white_t1b_mask1[~np.isnan(white_t1b_mask1)]
-     white_t1b_iqr1 = scipy.stats.iqr(white_t1b_mask1[np.nonzero(white_t1b_mask1)])
-     
-     white_t1b_mean2 = np.nanmean(white_t1b_mask2[np.nonzero(white_t1b_mask2)])
-     white_t1b_std2 = np.nanstd(white_t1b_mask2[np.nonzero(white_t1b_mask2)])
-     white_t1b_mask2 = white_t1b_mask2[~np.isnan(white_t1b_mask2)]
-     white_t1b_iqr2 = scipy.stats.iqr(white_t1b_mask2[np.nonzero(white_t1b_mask2)])
-     
-     white_taub_mean1 = np.nanmean(white_taub_mask1[np.nonzero(white_taub_mask1)])
-     white_taub_std1 = np.nanstd(white_taub_mask1[np.nonzero(white_taub_mask1)])
-     white_taub_mask1 = white_taub_mask1[~np.isnan(white_taub_mask1)]
-     white_taub_iqr1 = scipy.stats.iqr(white_taub_mask1[np.nonzero(white_taub_mask1)])
-     
-     white_taub_mean2 = np.nanmean(white_taub_mask2[np.nonzero(white_taub_mask2)])
-     white_taub_std2 = np.nanstd(white_taub_mask2[np.nonzero(white_taub_mask2)])
-     white_taub_mask2 = white_taub_mask2[~np.isnan(white_taub_mask2)]
-     white_taub_iqr2 = scipy.stats.iqr(white_taub_mask2[np.nonzero(white_taub_mask2)])
-     
-     white_vb_mean1 = np.nanmean(white_vb_mask1[np.nonzero(white_vb_mask1)])
-     white_vb_std1 = np.nanstd(white_vb_mask1[np.nonzero(white_vb_mask1)])
-     white_vb_mask1 = white_vb_mask1[~np.isnan(white_vb_mask1)]
-     white_vb_iqr1 = scipy.stats.iqr(white_vb_mask1[np.nonzero(white_vb_mask1)])
-     
-     white_vb_mean2 = np.nanmean(white_vb_mask2[np.nonzero(white_vb_mask2)])
-     white_vb_std2 = np.nanstd(white_vb_mask2[np.nonzero(white_vb_mask2)])
-     white_vb_mask2 = white_vb_mask2[~np.isnan(white_vb_mask2)]
-     white_vb_iqr2 = scipy.stats.iqr(white_vb_mask2[np.nonzero(white_vb_mask2)])
-     
-     WMmeans[volit,:,0] = np.array([white_t1t_mean1, white_t1b_mean1, white_vb_mean1, white_taub_mean1])
-     WMmeans[volit,:,1] = np.array([white_t1t_mean2, white_t1b_mean2, white_vb_mean2, white_taub_mean2])
-       
-     GMmeans[volit,:,0] = np.array([grey_t1t_mean1, grey_t1b_mean1, grey_vb_mean1, grey_taub_mean1])
-     GMmeans[volit,:,1] = np.array([grey_t1t_mean2, grey_t1b_mean2, grey_vb_mean2, grey_taub_mean2])
-      
-     WMstd[volit,:,0] = np.array([white_t1t_std1, white_t1b_std1, white_vb_std1, white_taub_std1])
-     WMstd[volit,:,1] = np.array([white_t1t_std2, white_t1b_std2, white_vb_std2, white_taub_std2])
-      
-     GMstd[volit,:,0] = np.array([grey_t1t_std1, grey_t1b_std1, grey_vb_std1, grey_taub_std1])
-     GMstd[volit,:,1] = np.array([grey_t1t_std2, grey_t1b_std2, grey_vb_std2, grey_taub_std2])
-
- '''------------------------ REPEATIBILITY COEFFICIENT-------------------------''' 
+'''------------------------ REPEATIBILITY COEFFICIENT-------------------------''' 
  
 rcWM = 1.96 * np.sqrt(np.sum((WMmeans[:,:,0]-WMmeans[:,:,1])**2, axis=0)/np.size(volunteerRange))
 rcGM = 1.96 * np.sqrt(np.sum((GMmeans[:,:,0]-GMmeans[:,:,1])**2, axis=0)/np.size(volunteerRange))
 
- '''----------------INTRACLASS CORRELATION COEFFICIENT------------------------''' 
+'''----------------INTRACLASS CORRELATION COEFFICIENT------------------------''' 
 
 #Reformat data as dataframe 
 

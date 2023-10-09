@@ -8,10 +8,7 @@ VARIATIONS IN:
     - tb: intravascular water residence time 
     - T1t: T1 of tissue compartment
     - T1b: T1 of blood compartment 
-
-TO DO: 
-    - Need to add additional tissue compartment to elevate partial volume effects 
-    
+    - B1+: B1 multiplication factor
 
 Author: Emma Thomson
 Year: 2022
@@ -25,45 +22,9 @@ import numpy as np
 import sys
 import os
 import platform
-if platform.system() == "Darwin":
-    sys.path.insert(0, "/Users/emmathomson/Dropbox/Coding/BBB_MRFSGRE/coreSimulations/functions/")
-else: 
-    sys.path.insert(0, "/home/ethomson/Coding/Fingerprinting/coreSimulations/functions/")
+sys.path.insert(0, "./coreSimulations/functions/")
 from blochSimulation import MRFSGRE
-'''
-os.chdir("/Users/emmathomson/Dropbox/Coding/Python-Codes/noise/")
-from noise import pnoise1
-os.chdir("/Users/emmathomson/Dropbox/Coding/BBB_MRFSGRE/coreSimulations/")
 
-def perlin(span, tr_min, tr_max):
-
-    if len(sys.argv) > 1:
-    	octaves = int(sys.argv[1])
-    else:
-    	octaves = 1
-        
-    base = 0
-    #min = max = 0
-    
-    x_arr  = []
-    y_arr = []
-    
-    points = 2000
-    r = range(points)
-    
-    for i in r:
-        x = float(i) * span / points - 0.5 * span
-        y = pnoise1(x + base, octaves)
-        x_arr.append([x])
-        y_arr.append([y])
-        
-    #normalize 
-    norm_y = (y_arr - np.min(y_arr)) / (np.max(y_arr) - np.min(y_arr))
-    TR_array = np.round((norm_y*(tr_max-tr_min))+tr_min,1)
-    #TR_array = y_arr
-    
-    return TR_array
-'''
 ''' ----------------------SPECIFY PARAMETERS------------------------------ '''
 
 #Definition of the function that calculates the parameters for each of the 
@@ -76,7 +37,7 @@ def parameterGeneration():
     
     ## ISOCHROMAT INFORMATION
     
-    ## Specify dimentsions of total array (2D along x and y)
+    ## Specify dimentsions of total array (3D along x, y, and z)
     # noOfIsochromatsX MUST be divisible by the vb steps
     # i.e. if 1% blood volume steps are required then need noOfIsochromatsX = 100 
     #      if 0.1% blood volume steps are required, noOfIsochromatsX = 1000 etc.
@@ -84,7 +45,6 @@ def parameterGeneration():
     noOfIsochromatsY = 1
     noOfIsochromatsZ = 10
     # TR train length
-    ## FIX ME
     noOfRepetitions = 2000
     
     ## TISSUE PROPERTIES
@@ -111,29 +71,22 @@ def parameterGeneration():
     t1bArray = range(1540,1940,27) 
     # multiplication factor for the B1 value (multi)
     multiArray = range(70, 120, 3) 
-    #efficiency of the ir pulse 
 
     ## NOISE INFORMATION 
-    # number of noise levels\\\\\\\\\\\\\\\\\\\\\
-    #  for dictionary generation for comparison to experimental data set to one 
-    noise = 1
-    # number of times each noise level is samples
+    # number of noise levels
     # for dictionary generation for comparison to experimental data set to one 
-    #noiseSamples =  1#50
+    noise = 1
     
     #The dictionary folder identifier
     #In folder will show as "DictionaryXXX" 
     #This folder needs to already exist or code will not run 
-    
-    #TO NOTE: SAMPLES HAS BEEN SET TO 50 
 
     dictionaryId  = 'IsosampleLarge'
 
-    
     ## SHAPE OF VARIATIONS
     
    # Variations of the flip angle and repetition time have constrained shapes 
-    # dictated by 5 parameters (a- e). They are also dicated by an overall shape 
+    # dictated by 5 parameters (a-e). They are also dicated by an overall shape 
     # specified here  
     # For flip angle [degrees]: 
     #       random: random variation in FA between two values: 0 and 4*a
@@ -185,11 +138,8 @@ def parameterGeneration():
             faArray[250*ii:250*ii+gapLength] = 0
       
     #Save array for calling in the main function later
-    if platform.system() == "Darwin":
-        np.save('./holdArrays/faArray_'  + str(instance) + '.npy', faArray)
-    else:
-        np.save('/home/ethomson/Coding/Fingerprinting/coreSimulations/functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
-  
+    np.save('./holdArrays/faArray_'  + str(instance) + '.npy', faArray)
+    
     ##  DEFINING TR ARRAY
     
     if caseTR == 'sin':
@@ -202,16 +152,9 @@ def parameterGeneration():
     elif caseTR == 'random':
         #Generate a uniform random array between for the number of repetitions
         trArray = np.random.uniform(d,e,[noOfRepetitions])
-    '''   
-    elif caseTR == 'perlin':
-        trArray = perlin(c,d,e)
-    '''
     #Save array for calling in the main function later
-    
-    if platform.system() == "Darwin":
-        np.save('./holdArrays/trArray_' + str(instance) + '.npy', trArray)
-    else: 
-         np.save('/home/ethomson/Coding/Fingerprinting/coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
+    np.save('./holdArrays/trArray_' + str(instance) + '.npy', trArray)
+
     #Get all combinations of arrays (parameters for each dictionary entry)
     #In format of list of tuples
     params = list(itertools.product(t1tArray, t1bArray, resArray, percArray, multiArray))
@@ -234,13 +177,20 @@ def parameterGeneration():
 #concatenated all parameters into one list of tuples
 def simulationFunction(paramArray):
     
-    invSwitch = 0
-    sliceProfileSwitch = 0
+    #Is there an inversion pulse
+    invSwitch = True
+    # Is slice profile accounted for
+    sliceProfileSwitch = True
+    # Number of noise samples generated 
+    # Set to one for dictionary gneeration 
     samples = 1
-
-    parameters = tuple(paramArray)
     
+    parameters = tuple(paramArray)
     t1Array = np.array([parameters[0],parameters[1]])
+    #These parameters are: 
+    # t1Array, t2Array, t2StarArray, noOfIsochromatsX, noOfIsochromatsY, 
+    # noOfIsochromatsZ, noOfRepetitions, noise, perc, res, multi, inv, 
+    # sliceProfileSwitch, samples, dictionaryId, instance
     MRFSGRE(t1Array, parameters[5], parameters[6],
             parameters[7], parameters[8], parameters[13],
             parameters[9], parameters[10], parameters[3]/10, parameters[2],
@@ -255,13 +205,12 @@ if __name__ == '__main__':
     #Multiprocessing requires all moduels used within the threads to be defined
     #within __main__
     #I think this is a safety feature
-    import os
-    if platform.system() == "Darwin":
-        os.chdir("./functions/")
+    os.chdir("./functions/")
     import time
     import itertools
     import multiprocessing as mp
     #For multiprocessing use the number of available cpus  
+    #Currently set to perform differently on my Mac ('Darwin') system vs the cluster
     if platform.system() == "Darwin":
         #If on local computer can use all CPUs
         pool = mp.Pool(10)

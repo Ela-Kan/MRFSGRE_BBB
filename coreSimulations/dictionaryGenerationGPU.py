@@ -8,10 +8,7 @@ VARIATIONS IN:
     - tb: intravascular water residence time 
     - T1t: T1 of tissue compartment
     - T1b: T1 of blood compartment 
-
-TO DO: 
-    - Need to add additional tissue compartment to elevate partial volume effects 
-    
+    - B1+: B1 multiplication factor
 
 Author: Emma Thomson
 Year: 2022
@@ -29,13 +26,9 @@ try:
 except RuntimeError:
     pass
 import platform
-if platform.system() == "Darwin":
-    sys.path.insert(0, "/Users/emmathomson/Dropbox/Coding/BBB_MRFSGRE/coreSimulations/functions/")
-else: 
-    sys.path.insert(0, "/home/ethomson/Coding/Fingerprinting/coreSimulations/functions/")
+
+sys.path.insert(0, "./coreSimulations/functions/")
 from blochSimulation import MRFSGRE
-
-
 
 ''' ----------------------SPECIFY PARAMETERS------------------------------ '''
 
@@ -49,7 +42,7 @@ def parameterGeneration():
     
     ## ISOCHROMAT INFORMATION
     
-    ## Specify dimentsions of total array (2D along x and y)
+    ## Specify dimentsions of total array (3D along x, y, and z)
     # noOfIsochromatsX MUST be divisible by the vb steps
     # i.e. if 1% blood volume steps are required then need noOfIsochromatsX = 100 
     #      if 0.1% blood volume steps are required, noOfIsochromatsX = 1000 etc.
@@ -88,9 +81,6 @@ def parameterGeneration():
     # number of noise levels
     #  for dictionary generation for comparison to experimental data set to one 
     noise = 1
-    # number of times each noise level is samples
-    # for dictionary generation for comparison to experimental data set to one 
-    #noiseSamples =  1#50
     
     #The dictionary folder identifier
     #In folder will show as "DictionaryXXX" 
@@ -156,11 +146,8 @@ def parameterGeneration():
             faArray[250*ii:250*ii+gapLength] = 0
       
     #Save array for calling in the main function later
-    if platform.system() == "Darwin":
-        np.save('./holdArrays/faArray_'  + str(instance) + '.npy', faArray)
-    else:
-        np.save('/home/ethomson/Coding/Fingerprinting/coreSimulations/functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
-  
+    np.save('./coreSimulations/functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
+    
     ##  DEFINING TR ARRAY
     
     if caseTR == 'sin':
@@ -175,10 +162,8 @@ def parameterGeneration():
         trArray = np.random.uniform(d,e,[noOfRepetitions])
    
     #Save array for calling in the main function later
-    if platform.system() == "Darwin":
-        np.save('./holdArrays/trArray_' + str(instance) + '.npy', trArray)
-    else: 
-         np.save('/home/ethomson/Coding/Fingerprinting/coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
+    np.save('./coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
+    
     #Get all combinations of arrays (parameters for each dictionary entry)
     #In format of list of tuples
     params = list(itertools.product(t1tArray, t1bArray, resArray, percArray, multiArray))
@@ -201,13 +186,20 @@ def parameterGeneration():
 #concatenated all parameters into one list of tuples
 def simulationFunction(paramArray):
     
-    invSwitch = 1
-    sliceProfileSwitch = 1
+    #Is there an inversion pulse
+    invSwitch = True
+    # Is slice profile accounted for
+    sliceProfileSwitch = True
+    # Number of noise samples generated 
+    # Set to one for dictionary gneeration 
     samples = 1
-
-    parameters = tuple(paramArray)
     
+    parameters = tuple(paramArray)
     t1Array = np.array([parameters[0],parameters[1]])
+    #These parameters are: 
+    # t1Array, t2Array, t2StarArray, noOfIsochromatsX, noOfIsochromatsY, 
+    # noOfIsochromatsZ, noOfRepetitions, noise, perc, res, multi, inv, 
+    # sliceProfileSwitch, samples, dictionaryId, instance
     MRFSGRE(t1Array, parameters[5], parameters[6],
             parameters[7], parameters[8], parameters[13],
             parameters[9], parameters[10], parameters[3]/10, parameters[2],
@@ -236,8 +228,8 @@ if __name__ == '__main__':
     config.gpu_options.per_process_gpu_memory_fraction = 0.7
     set_session(tf.compat.v1.Session(config=config))
     
-    
     #For multiprocessing use the number of available cpus  
+    #Currently set to perform differently on my Mac ('Darwin') system vs the cluster
     if platform.system() == "Darwin":
         #If on local computer can use all CPUs
         pool = mp.Pool(12)
