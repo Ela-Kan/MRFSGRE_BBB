@@ -141,7 +141,7 @@ def parameterGeneration():
      
     print(os.getcwd())
     #Save array for calling in the main function later
-    np.save('./functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
+    np.save('./coreSimulations/functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
     
     ##  DEFINING TR ARRAY
     
@@ -156,7 +156,7 @@ def parameterGeneration():
         #Generate a uniform random array between for the number of repetitions
         trArray = np.random.uniform(d,e,[noOfRepetitions])
     #Save array for calling in the main function later
-    np.save('./functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
+    np.save('./coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
 
     #Get all combinations of arrays (parameters for each dictionary entry)
     #In format of list of tuples
@@ -180,7 +180,7 @@ def parameterGeneration():
 #concatenated all parameters into one list of tuples
 def simulationFunction(paramArray):
     
-    sys.path.insert(0, "./functions/")
+    sys.path.insert(0, "./coreSimulations/functions/")
     from blochSimulation import MRFSGRE
     
     #Is there an inversion pulse
@@ -216,10 +216,17 @@ if __name__ == '__main__':
     import time
     import itertools
     import multiprocessing as mp
+
+    print('Beginning dictionary generation...')
+
     #For multiprocessing use the number of available cpus  
     #Currently set to perform differently on my Mac ('Darwin') system vs the cluster
     if platform.system() == "Darwin":
         #If on local computer can use all CPUs
+        pool = mp.Pool(8)
+
+    if platform.system() == "Windows": # adding my Windows PC for testing
+         #If on local computer can use all CPUs
         pool = mp.Pool(8)
     else:
         #If on cluster only use a few 
