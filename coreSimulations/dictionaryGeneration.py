@@ -63,16 +63,15 @@ def parameterGeneration():
     
     # Specify the ranges and step sizes of the dictionary dimensions
     # intravascular water residence time (res) UNIT: ms
-
-    resArray =  range(200,1700,107) #range(200,1700,70) 
+    resArray = range(200,1700,107) #range(200,1700,107) #range(200,1700,70) 
     # percentage blood volume (perc) UNIT: %
     percArray = range(10,110,7) #REMEMBER IT WILL BE DIVIDED BY 10 
     #T1 of tissue compartment (t1t) UNIT: ms
-    t1tArray = range(700,1700,69) 
+    t1tArray = [1300] #range(700,1700,69) 
     #T1 of blood compartment (t1b) UNIT: ms
-    t1bArray = range(1540,1940,27) 
+    t1bArray = [1700] #range(1540,1940,27) 
     # multiplication factor for the B1 value (multi)
-    multiArray = range(70, 120, 3) 
+    multiArray = [100] #range(70, 120, 3) 
 
     ## NOISE INFORMATION 
     # number of noise levels
@@ -141,7 +140,7 @@ def parameterGeneration():
      
     print(os.getcwd())
     #Save array for calling in the main function later
-    np.save('./coreSimulations/functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
+    np.save('./MRFSGRE_BBB/coreSimulations/functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
     
     ##  DEFINING TR ARRAY
     
@@ -156,7 +155,7 @@ def parameterGeneration():
         #Generate a uniform random array between for the number of repetitions
         trArray = np.random.uniform(d,e,[noOfRepetitions])
     #Save array for calling in the main function later
-    np.save('./coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
+    np.save('./MRFSGRE_BBB/coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
 
     #Get all combinations of arrays (parameters for each dictionary entry)
     #In format of list of tuples
@@ -180,7 +179,7 @@ def parameterGeneration():
 #concatenated all parameters into one list of tuples
 def simulationFunction(paramArray):
     
-    sys.path.insert(0, "./coreSimulations/functions/")
+    sys.path.insert(0, "./MRFSGRE_BBB/coreSimulations/functions/")
     from blochSimulation import MRFSGRE
     
     #Is there an inversion pulse

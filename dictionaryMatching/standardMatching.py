@@ -41,8 +41,9 @@ t0 = time.time()
 import warnings
 warnings.filterwarnings("ignore")
 
-#go up a folder
-os.chdir("..")
+#set cwd to the code folder
+
+os.chdir("/Users/ela/Documents/PhD/code/")
 
 ''' -----------------------------INPUTS--------------------------------- '''
 
@@ -50,7 +51,7 @@ os.chdir("..")
 volunteer_no = 1.1
 
 # Dictionary folder
-dictfolder = 'WEXandBVfreeNew'  #'SliceProfileNew' #'WEXandBVfreeNew' #'Sequence' #'InversionRecovery'
+dictfolder = '2Dsim'  #'SliceProfileNew' #'WEXandBVfreeNew' #'Sequence' #'InversionRecovery'
 
 #image resolutiopn  
 res_x =  64; res_y = 64;
@@ -58,11 +59,13 @@ res_x =  64; res_y = 64;
 acqlen = 2000
 
 #Folder Path
-# Image folder paths 
-pathToFolder = ('./SampleData/Volunteer' + str(volunteer_no) + '/MRF')
-bigpath = (pathToFolder + '/Images/') 
 
-dictPath = ('./dictionaries/Dictionary' + dictfolder + '/')
+# Image folder paths 
+print('cwd')
+print(os.getcwd())
+pathToFolder = ('./MRFSGRE_BBB/SampleData/Volunteer' + str(volunteer_no) + '/MRF')
+bigpath = (pathToFolder + '/Images/') 
+dictPath = ('./MRFSGRE_BBB/dictionaries/Dictionary' + dictfolder + '/')
 
 #Use the denoised data? 
 denoise = False
@@ -79,6 +82,7 @@ save_im = 'yes'
 seg_im = 'no'
 
 #Number of entries in dictionary (to set array sizes)
+print(os.listdir(os.getcwd()))
 no_entries = np.size(os.listdir(dictPath))
 
 ''' ---------------------------READ IN DATA------------------------------- '''
@@ -109,7 +113,7 @@ binary_mask = 1
 if mask_im == 'yes':
     
     rr = '*brain_mask.nii.gz' 
-    for filename in glob.glob(os.path.join(str('./SampleData/Volunteer' + str(volunteer_no) + '/Mask_Images/' + rr))):
+    for filename in glob.glob(os.path.join(str('./MRFSGRE_BBB/SampleData/Volunteer' + str(volunteer_no) + '/Mask_Images/' + rr))):
          
          mask_load = nib.load(filename)
          mask = np.fliplr(np.flipud(np.array(mask_load.dataobj).T))
@@ -137,7 +141,7 @@ print("Starting Segmentation:  " + str(time.strftime('%X %x %Z')))
 
 if seg_im == 'yes':
     
-    seg_path = './SampleData/Volunteer' + str(volunteer_no) + '/Mask_Images/Segmented/'
+    seg_path = './MRFSGRE_BBB/SampleData/Volunteer' + str(volunteer_no) + '/Mask_Images/Segmented/'
     
     segCSF = 0
     
@@ -186,7 +190,7 @@ norm_sims = np.linalg.norm(array, 2)
 for ii in range(0,np.size(array,1)):
     array[:,ii] = (array[:,ii]/(np.linalg.norm(array[:,ii],2))) 
 
-param_est = np.zeros([res_x,res_x,5])
+param_est = np.zeros([res_x,res_x,5]) # estimating 5 parameters
 
 ''' -----------------------------MATCHING-------------------------------- '''
 
@@ -284,7 +288,7 @@ if seg_im == 'yes':
     
     print("Starting Segmentation:  " + str(time.strftime('%X %x %Z')))
     
-    seg_path = './SampleData/Volunteer' + str(volunteer_no) + '/Mask_Images/Segmented/'
+    seg_path = './MRFSGRE_BBB/SampleData/Volunteer' + str(volunteer_no) + '/Mask_Images/Segmented/'
     segnames = os.listdir(seg_path)
     #Only reading in image files
     segString = str(res_x) + "_pve"
@@ -323,7 +327,9 @@ if seg_im == 'yes':
 if save_im == 'yes': 
     
     rr = '*T2.nii.gz' 
-    for filename in glob.glob(os.path.join(str('./SampleData/Volunteer' + str(volunteer_no) + '/Mask_Images/' + rr))):
+    print(glob.glob(os.path.join(str('./MRFSGRE_BBB/SampleData/Volunteer' + str(volunteer_no) + '/Mask_Images/' + rr))))
+    for filename in glob.glob(os.path.join(str('./MRFSGRE_BBB/SampleData/Volunteer' + str(volunteer_no) + '/Mask_Images/' + rr))):
+        
         img = nib.load(filename)    
         aff = img.affine
                   

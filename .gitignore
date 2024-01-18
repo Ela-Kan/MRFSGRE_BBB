@@ -1,0 +1,5 @@
+ # any generated dictionaries
+.npy
+.txt
+# any new images
+.nii.gz

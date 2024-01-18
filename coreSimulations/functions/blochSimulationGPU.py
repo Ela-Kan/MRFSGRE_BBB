@@ -31,6 +31,7 @@ from longTR import longTR
 from invPulse import invpulse
 import platform
 from scipy import signal, io
+import os
 
 """---------------------------MAIN FUNCTION--------------------------------------"""
 def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
@@ -96,6 +97,7 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
     
     ### FA array
     faString = './coreSimulations/functions/holdArrays/faArray_' + str(instance) + '.npy'
+    print(os.cwd())
     faArray = np.load(faString) 
 
     ### Open and round TR array 

@@ -71,7 +71,7 @@ rr = '*_1.npy'
 #Loading all signals
 
 #for filename in glob.glob(os.path.join(str('/Users/emmathomson/Desktop/Local/Dictionaries/Dictionary' + dictionaryid + '/' + rr))):
-for filename in glob.glob((str('./dictionaries/Dictionary' + dictionaryid + '/' + rr))):
+for filename in glob.glob((str('./MRFSGRE_BBB/dictionaries/Dictionary' + dictionaryid + '/' + rr))):
 #for filename in glob.glob(os.path.join(str('/Volumes/MyPassportforMac/Dictionaries_2022/Dictionaries/Dictionary' + dictionaryid + '/' + rr))):    
         with open(os.path.join(filename), 'r') as f:
             hold = np.load(filename)

@@ -33,6 +33,8 @@ from invPulse import invpulse
 import platform
 import os
 
+#os.chdir(os.getcwd() + '/MRFSGRE_BBB/')
+
 """---------------------------MAIN FUNCTION--------------------------------------"""
 def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
             noOfIsochromatsY, noOfIsochromatsZ, noOfRepetitions, noise, perc, res,
@@ -72,7 +74,7 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
         SLICE PROFILE ARRAY READ IN
     '''
     if sliceProfileSwitch == 1: 
-        sliceProfilePath = './sliceProfile/sliceProfile.mat'
+        sliceProfilePath = './MRFSGRE_BBB/sliceProfile/sliceProfile.mat'
         sliceProfileArray = io.loadmat(sliceProfilePath)['sliceProfile']
         #to give an even sample of the slice profile array 
         endPoint = np.size(sliceProfileArray, 1)
@@ -96,17 +98,17 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
     vecMArrayBlood = np.expand_dims(vecMArrayBlood, axis=4)
     
     ### FA array
-    faString = './coreSimulations/functions/holdArrays/faArray_' + str(instance) + '.npy'
+    faString = './MRFSGRE_BBB/coreSimulations/functions/holdArrays/faArray_' + str(instance) + '.npy'
     faArray = np.load(faString) 
 
     ### Open and round TR array 
-    trString = './coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy'
+    trString = './MRFSGRE_BBB/coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy'
     trArray = np.load(trString)
     # Rounding is required in order to assure that TR is divisable by deltaT
     trRound = np.round(trArray, 0)
     
     ### Open noise sample array
-    noiseArray = np.load('./coreSimulations/functions/holdArrays/noiseSamples.npy')
+    noiseArray = np.load('./MRFSGRE_BBB/coreSimulations/functions/holdArrays/noiseSamples.npy')
 
     ### Empty signal array to store all magnitization at all time points 
     signal = np.zeros([noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3, noOfRepetitions])
@@ -307,7 +309,7 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
             signalNoisy[:,:] = np.transpose(np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2))
             
         #Save signal        
-        name = '../dictionaries/Dictionary' + dictionaryId +'/' + signalName + str(samp + 1)
+        name = './MRFSGRE_BBB/dictionaries/Dictionary' + dictionaryId +'/' + signalName + str(samp + 1)
         np.save(name, signalNoisy)
 
     return signalNoisy
