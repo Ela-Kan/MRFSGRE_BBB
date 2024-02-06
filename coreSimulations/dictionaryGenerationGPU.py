@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 """-----------------------------------------------------------------------------
 Dictionary generation for a MR fingerprint using a bloch simiulation of a 
 two compartment model with a semipermeable barrier 
@@ -16,19 +17,16 @@ Institution: Centre for Medical Image Computing: University College London
 Email: e.thomson.19@ucl.ac.uk
 ----------------------------------------------------------------------------"""
 
+""""""
 ''' -----------------------------PACKAGES--------------------------------- '''
 ## IMPORT DEPENDANCIES
 import numpy as np
 import sys
-from torch.multiprocessing import Pool, Process, set_start_method
-try:
-     set_start_method('spawn', force=True)
-except RuntimeError:
-    pass
+import os
 import platform
 
-sys.path.insert(0, "./coreSimulations/functions/")
-from blochSimulation import MRFSGRE
+
+
 
 ''' ----------------------SPECIFY PARAMETERS------------------------------ '''
 
@@ -66,15 +64,15 @@ def parameterGeneration():
     # Specify the ranges and step sizes of the dictionary dimensions
     # intravascular water residence time (res) UNIT: ms
 
-    resArray =  range(200,1680,80) #range(200,1700,70) 
+    resArray =  range(200,1700,107) #range(200,1680,80) #range(200,1700,70) 
     # percentage blood volume (perc) UNIT: %
-    percArray =  range(10,105,5) #REMEMBER IT WILL BE DIVIDED BY 10 
+    percArray =  range(10,110,7) #range(10,105,5) #REMEMBER IT WILL BE DIVIDED BY 10 
     #T1 of tissue compartment (t1t) UNIT: ms
-    t1tArray = range(600,1600,50) 
+    t1tArray = [1300] #range(600,1600,50) 
     #T1 of blood compartment (t1b) UNIT: ms
-    t1bArray = range(1600,1850,50) 
+    t1bArray =[1700]#range(1600,1850,50) 
     # multiplication factor for the B1 value (multi)
-    multiArray = range(70, 112, 2) 
+    multiArray = [100] #range(70, 112, 2) 
     #efficiency of the ir pulse 
 
     ## NOISE INFORMATION 
@@ -88,7 +86,7 @@ def parameterGeneration():
     
     #TO NOTE: SAMPLES HAS BEEN SET TO 50 
 
-    dictionaryId  = 'HYDRAXXL'
+    dictionaryId  = 'Test'
 
     
     ## SHAPE OF VARIATIONS
@@ -146,7 +144,7 @@ def parameterGeneration():
             faArray[250*ii:250*ii+gapLength] = 0
       
     #Save array for calling in the main function later
-    np.save('./coreSimulations/functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
+    np.save('./functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
     
     ##  DEFINING TR ARRAY
     
@@ -162,7 +160,7 @@ def parameterGeneration():
         trArray = np.random.uniform(d,e,[noOfRepetitions])
    
     #Save array for calling in the main function later
-    np.save('./coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
+    np.save('./functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
     
     #Get all combinations of arrays (parameters for each dictionary entry)
     #In format of list of tuples
@@ -185,7 +183,10 @@ def parameterGeneration():
 #Requires a single argument for parallelisation to work so previous function 
 #concatenated all parameters into one list of tuples
 def simulationFunction(paramArray):
-    
+
+    sys.path.insert(0, "./functions/")
+    from blochSimulation import MRFSGRE
+
     #Is there an inversion pulse
     invSwitch = True
     # Is slice profile accounted for
@@ -200,6 +201,8 @@ def simulationFunction(paramArray):
     # t1Array, t2Array, t2StarArray, noOfIsochromatsX, noOfIsochromatsY, 
     # noOfIsochromatsZ, noOfRepetitions, noise, perc, res, multi, inv, 
     # sliceProfileSwitch, samples, dictionaryId, instance
+
+    
     MRFSGRE(t1Array, parameters[5], parameters[6],
             parameters[7], parameters[8], parameters[13],
             parameters[9], parameters[10], parameters[3]/10, parameters[2],
@@ -215,24 +218,30 @@ if __name__ == '__main__':
     #within __main__
     #I think this is a safety feature
     import os
-    if platform.system() == "Darwin":
-        os.chdir("./functions/")
+    #if platform.system() == "Darwin":
+    #    os.chdir("./functions/")
+    #    print(os.getcwd())
     import time
     import itertools
     import torch.multiprocessing as mp
     import tensorflow as tf
-    
+
+
+
+    """   
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     from tensorflow.compat.v1.keras.backend import set_session
     config = tf.compat.v1.ConfigProto()
     config.gpu_options.per_process_gpu_memory_fraction = 0.7
     set_session(tf.compat.v1.Session(config=config))
+    """
+    
     
     #For multiprocessing use the number of available cpus  
     #Currently set to perform differently on my Mac ('Darwin') system vs the cluster
     if platform.system() == "Darwin":
         #If on local computer can use all CPUs
-        pool = mp.Pool(12)
+        pool = mp.Pool(8)
     else:
         #If on cluster only use a few 
         pool = mp.Pool(8)
@@ -241,11 +250,12 @@ if __name__ == '__main__':
     #Generate the parameters
     params = parameterGeneration()
     
-    
+    print("Beginning dictionary generation...")
     #Run main function in parallel 
     #Current laptop (2021 M1 Macbook Pro) will have 8 CPUs available
     try:
         pool.map(simulationFunction, params)
+
     finally:
         #Terminate and join the threads after parallelisation is done
         pool.terminate()
@@ -256,3 +266,5 @@ if __name__ == '__main__':
     t1 = time.time()
     total = t1-t0
     print(total)   
+
+

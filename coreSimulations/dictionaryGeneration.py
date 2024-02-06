@@ -138,10 +138,12 @@ def parameterGeneration():
         for ii in range(1,noOfGaps):
             faArray[250*ii:250*ii+gapLength] = 0
      
-    print(os.getcwd())
+
     #Save array for calling in the main function later
-    np.save('./MRFSGRE_BBB/coreSimulations/functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
-    
+    print(os.getcwd())
+    #np.save('./coreSimulations/functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
+    np.save('./functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
+
     ##  DEFINING TR ARRAY
     
     if caseTR == 'sin':
@@ -155,7 +157,7 @@ def parameterGeneration():
         #Generate a uniform random array between for the number of repetitions
         trArray = np.random.uniform(d,e,[noOfRepetitions])
     #Save array for calling in the main function later
-    np.save('./MRFSGRE_BBB/coreSimulations/functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
+    np.save('./functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
 
     #Get all combinations of arrays (parameters for each dictionary entry)
     #In format of list of tuples
@@ -179,7 +181,7 @@ def parameterGeneration():
 #concatenated all parameters into one list of tuples
 def simulationFunction(paramArray):
     
-    sys.path.insert(0, "./MRFSGRE_BBB/coreSimulations/functions/")
+    sys.path.insert(0, "./functions/")
     from blochSimulation import MRFSGRE
     
     #Is there an inversion pulse

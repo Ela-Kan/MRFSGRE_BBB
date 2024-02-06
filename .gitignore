@@ -3,3 +3,5 @@
 .txt
 # any new images
 .nii.gz
+.nii
+.cpython-312.pyc

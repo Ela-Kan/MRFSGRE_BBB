@@ -75,7 +75,7 @@ filt = 'G' #G = gaussian #MF = median filtering
 sigma = 0.5 #1 
 
 #Display masked images? 
-mask_im = 'no'
+mask_im = 'yes'
 #Save parameter maps? 
 save_im = 'yes'
 #Segement images?
