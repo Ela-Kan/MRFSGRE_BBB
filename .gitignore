@@ -5,3 +5,8 @@
 .nii.gz
 .nii
 .pyc
+*.pyc
+coreSimulations/functions/.DS_Store
+dictionaries/.DS_Store
+.DS_Store
+*.npy

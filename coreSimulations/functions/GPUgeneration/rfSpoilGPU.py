@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """-----------------------------------------------------------------------------
-Author: Emma Thomson and Ela Kanani
-Year: 2022-2024
+Author: Emma Thomson
+Year: 2022
 Institution: Centre for Medical Image Computing: University College London
 Email: e.thomson.19@ucl.ac.uk
 -------------------------------------------------------------------------------"""

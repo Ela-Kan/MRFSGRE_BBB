@@ -1,19 +1,5 @@
 # -*- coding: utf-8 -*-
 """-----------------------------------------------------------------------------
-Bloch Simulaton code for a two compartment model with a semipermeable barrier 
-
-INCLUDING:
-- 2D set of isochromats with frequency encoding 
-- Exchange between two compartments
-- Variable fractional compartment sizes  
-
-IMPORTANT ASSUMPTIONS
- - The effects of relaxation are ignored during the RF pulses 
- - Between pulses all transverse magnetization has relaxed back to
-   equilibrium
- - Frequencies in MHz have been converted to Hz to make the simulation
-   easier to visualise
-
 Author: Emma Thomson
 Year: 2022
 Institution: Centre for Medical Image Computing: University College London
@@ -24,11 +10,11 @@ Email: e.thomson.19@ucl.ac.uk
 
 ### IMPORT DEPENDENCIES
 import numpy as np
-from rfPulse import rfpulse
-from appliedPrecession import applied_precession
-from rfSpoil import rf_spoil
-from longTR import longTR
-from invPulse import invpulse
+from rfPulseGPU import rfpulse
+from appliedPrecessionGPU import applied_precession
+from rfSpoilGPU import rf_spoil
+from longTRGPU import longTR
+from invPulseGPU import invpulse
 import platform
 from scipy import signal, io
 import os
@@ -37,11 +23,65 @@ import os
 def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
             noOfIsochromatsY, noOfIsochromatsZ, noOfRepetitions, noise, perc, res,
             multi, inv, sliceProfileSwitch, samples, dictionaryId, instance):   
+    
+    """
+    Bloch Simulation code for a two compartment model with a semipermeable barrier 
+    INCLUDING:
+    - 2D set of isochromats with frequency encoding 
+    - Exchange between two compartments
+    - Variable fractional compartment sizes  
+
+    IMPORTANT ASSUMPTIONS
+    - The effects of relaxation are ignored during the RF pulses 
+    - Between pulses all transverse magnetization has relaxed back to
+    equilibrium
+    - Frequencies in MHz have been converted to Hz to make the simulation
+    easier to visualise
+
+    Parameters:
+    -----------
+    t1Array : numpy nd array, shape (2,)
+        Array of T1 values for the tissue and blood compartments
+    t2Array : numpy nd array, shape (2,)
+        Array of T2 values for the tissue and blood compartments
+    t2StarArray : numpy nd array, shape (2,)
+        Array of T2* values for the tissue and blood compartments
+    noOfIsochromatsX : int
+        Number of isochromats in the x direction
+    noOfIsochromatsY : int
+        Number of isochromats in the y direction
+    noOfIsochromatsZ : int
+        Number of isochromats in the z direction
+    noOfRepetitions : int
+        TR train length
+    noise : int
+        Number of noise levels (set to one for dictionary generation)
+    perc : int
+        Percentage blood volume % (NOTE: it is divided by ten)
+    res : int
+        intravascular water residence time UNIT: ms
+    multi : float
+        Multiplication factor for the B1 value
+    inv : bool
+        Inversion pulse switch
+    sliceProfileSwitch : bool
+        Slice profile switch
+    samples : int
+        Number of noise samples generated (set to one for dictionary generation)
+    dictionaryId : str
+        Dictionary ID
+    instance : int
+        Instance number for multiple instances of the same code to run
+    
+    Returns:
+    --------
+    signalNoisy : numpy nd array, shape (noOfRepetitions, noise)
+        Noisy signal array (magnitude of magnetization at echo time for each noise level)
+    """
  
     """--------------------PARAMETER DECLERATION------------------------------"""
     ### This is defined as a unit vector along the z-axis
     vecM = np.float64([[0],[0],[1]])
-    
     ### The modifiable variables are set as followed:
     # Maximum gradient height
     magnitudeOfGradient  = -6e-3 #UNIT: T/m
@@ -55,15 +95,17 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
                 np.meshgrid(range(noOfIsochromatsX),range(noOfIsochromatsY))
     positionArrayX = positionArrayXHold - ((noOfIsochromatsX/2))
     positionArrayY = positionArrayYHold - ((noOfIsochromatsY/2))
-    
+
     
     ### Time increment
     deltaT = 1 #ms
 
     #Initially gradient is 0 (while pulse is on)
     gradientX = 0 #T/m
-    gradientY = 0 #T/m 
     
+    Y = 0 #T/m 
+    
+
     ### Set echo time (must be divisible by deltaT) 
     ## TO DO: Need to remove hard coding for TE=2 out of calculation code 
     TE = 2 #ms
@@ -82,8 +124,9 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
         #profileSamples = profileSamples.astype(int)
         sliceProfile = sliceProfileArray[:,profileSamples]
     else: 
-    #If you want flat slice profile then this 
+    #If you want flat slice profile then this (i.e. homogenous excitation profile across the slice thickness)
         sliceProfile = np.tile(np.expand_dims(np.round(np.linspace(1,90,90*100),0), axis=1),noOfIsochromatsZ)
+
     
     """---------------------------OPEN ARRAYS-----------------------------"""
     
@@ -91,10 +134,11 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
     vecMArrayBlood = np.tile(vecM.T, [int(perc*noOfIsochromatsX/100), noOfIsochromatsY, noOfIsochromatsZ, 1])
     vecMArrayTissue = np.tile(vecM.T, [int(noOfIsochromatsX-perc*noOfIsochromatsX/100), noOfIsochromatsY, noOfIsochromatsZ, 1] )
         
+
     ### Expand the dimensions for multiplication 
     vecMArrayTissue = np.expand_dims(vecMArrayTissue, axis=4)
     vecMArrayBlood = np.expand_dims(vecMArrayBlood, axis=4)
-    
+
     ### FA array
     faString = './functions/holdArrays/faArray_' + str(instance) + '.npy'
     faArray = np.load(faString) 
@@ -312,6 +356,7 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
         #Save signal         
         name = '../dictionaries/Dictionary' + dictionaryId +'/' + signalName + str(samp + 1)
         np.save(name, signalNoisy)
+
 
     return signalNoisy
 

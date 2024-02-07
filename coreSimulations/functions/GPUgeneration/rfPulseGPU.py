@@ -42,7 +42,6 @@ def rfpulse(vecMArrayTissue, vecMArrayBlood, loop, faArray,noOfIsochromatsZ, sli
         Array of magnetization vectors for the blood compartment
     
     """
-  
     
     faInt = int(faArray[loop]*100)
     #Extract the flip angle of this loop (degrees)
@@ -69,7 +68,6 @@ def rfpulse(vecMArrayTissue, vecMArrayBlood, loop, faArray,noOfIsochromatsZ, sli
     #Combined rotation (in this case same as rotX)
     vecMRotation = np.matmul(rotY,rotX) 
 
-    print(vecMRotation.shape)
     # Updating the magnetization vector matricies
     #For tissue
     vecMArrayTissue = np.matmul(vecMRotation,vecMArrayTissue)

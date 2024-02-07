@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 """-----------------------------------------------------------------------------
 Dictionary generation for a MR fingerprint using a bloch simiulation of a 
 two compartment model with a semipermeable barrier 
@@ -17,22 +16,32 @@ Institution: Centre for Medical Image Computing: University College London
 Email: e.thomson.19@ucl.ac.uk
 ----------------------------------------------------------------------------"""
 
-""""""
 ''' -----------------------------PACKAGES--------------------------------- '''
 ## IMPORT DEPENDANCIES
 import numpy as np
 import sys
 import os
 import platform
+import torch
+import warnings
 
-
-
+#go up a folder
+#os.chdir("..")
 
 ''' ----------------------SPECIFY PARAMETERS------------------------------ '''
 
 #Definition of the function that calculates the parameters for each of the 
 # multiprocessing threads
 def parameterGeneration():
+    """
+    Generate the parameter combinations for the dictionary generation. 
+
+    Returns:
+    --------    
+    allParams : list of tuples
+        List of tuples containing the parameters for each dictionary entry
+    """
+    
     # To allow for multiple instances of the same code to be run simulataneously 
     # an instance is specified to ensure FA and TR array files are called 
     # to the correct simulation
@@ -58,41 +67,37 @@ def parameterGeneration():
     t2Array = np.array([90,63])
     t2StarArray = np.array([50,21])
      
+     ## FIX ME
     inv = True
     ## DEFINITION OF VARIATIONS
     
     # Specify the ranges and step sizes of the dictionary dimensions
     # intravascular water residence time (res) UNIT: ms
-
-    resArray =  range(200,1700,107) #range(200,1680,80) #range(200,1700,70) 
+    resArray = range(200,1700,107) #range(200,1700,107) #range(200,1700,70) 
     # percentage blood volume (perc) UNIT: %
-    percArray =  range(10,110,7) #range(10,105,5) #REMEMBER IT WILL BE DIVIDED BY 10 
+    percArray = range(10,110,7) #REMEMBER IT WILL BE DIVIDED BY 10 
     #T1 of tissue compartment (t1t) UNIT: ms
-    t1tArray = [1300] #range(600,1600,50) 
+    t1tArray = [1300] #range(700,1700,69) 
     #T1 of blood compartment (t1b) UNIT: ms
-    t1bArray =[1700]#range(1600,1850,50) 
+    t1bArray = [1700] #range(1540,1940,27) 
     # multiplication factor for the B1 value (multi)
-    multiArray = [100] #range(70, 112, 2) 
-    #efficiency of the ir pulse 
+    multiArray = [100] #range(70, 120, 3) 
 
     ## NOISE INFORMATION 
     # number of noise levels
-    #  for dictionary generation for comparison to experimental data set to one 
+    # for dictionary generation for comparison to experimental data set to one 
     noise = 1
     
     #The dictionary folder identifier
     #In folder will show as "DictionaryXXX" 
     #This folder needs to already exist or code will not run 
-    
-    #TO NOTE: SAMPLES HAS BEEN SET TO 50 
 
-    dictionaryId  = 'Test'
+    dictionaryId  = 'GPU'
 
-    
     ## SHAPE OF VARIATIONS
     
    # Variations of the flip angle and repetition time have constrained shapes 
-    # dictated by 5 parameters (a- e). They are also dicated by an overall shape 
+    # dictated by 5 parameters (a-e). They are also dicated by an overall shape 
     # specified here  
     # For flip angle [degrees]: 
     #       random: random variation in FA between two values: 0 and 4*a
@@ -142,10 +147,12 @@ def parameterGeneration():
         #Add gaps every 250 repetitions
         for ii in range(1,noOfGaps):
             faArray[250*ii:250*ii+gapLength] = 0
-      
+     
+
     #Save array for calling in the main function later
+    #np.save('./coreSimulations/functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
     np.save('./functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
-    
+
     ##  DEFINING TR ARRAY
     
     if caseTR == 'sin':
@@ -158,10 +165,9 @@ def parameterGeneration():
     elif caseTR == 'random':
         #Generate a uniform random array between for the number of repetitions
         trArray = np.random.uniform(d,e,[noOfRepetitions])
-   
     #Save array for calling in the main function later
     np.save('./functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
-    
+
     #Get all combinations of arrays (parameters for each dictionary entry)
     #In format of list of tuples
     params = list(itertools.product(t1tArray, t1bArray, resArray, percArray, multiArray))
@@ -183,10 +189,18 @@ def parameterGeneration():
 #Requires a single argument for parallelisation to work so previous function 
 #concatenated all parameters into one list of tuples
 def simulationFunction(paramArray):
+    """
+    Main function for the dictionary generation.
 
-    sys.path.insert(0, "./functions/")
-    from blochSimulation import MRFSGRE
-
+    Parameters:
+    ----------- 
+    paramArray : list
+        List of parameters for one dictionary entry
+    """
+    
+    sys.path.insert(0, "./functions/GPUgeneration/")
+    from blochSimulationGPU import MRFSGRE
+    
     #Is there an inversion pulse
     invSwitch = True
     # Is slice profile accounted for
@@ -196,13 +210,12 @@ def simulationFunction(paramArray):
     samples = 1
     
     parameters = tuple(paramArray)
+
     t1Array = np.array([parameters[0],parameters[1]])
     #These parameters are: 
     # t1Array, t2Array, t2StarArray, noOfIsochromatsX, noOfIsochromatsY, 
     # noOfIsochromatsZ, noOfRepetitions, noise, perc, res, multi, inv, 
     # sliceProfileSwitch, samples, dictionaryId, instance
-
-    
     MRFSGRE(t1Array, parameters[5], parameters[6],
             parameters[7], parameters[8], parameters[13],
             parameters[9], parameters[10], parameters[3]/10, parameters[2],
@@ -217,27 +230,22 @@ if __name__ == '__main__':
     #Multiprocessing requires all moduels used within the threads to be defined
     #within __main__
     #I think this is a safety feature
-    import os
-    #if platform.system() == "Darwin":
-    #    os.chdir("./functions/")
-    #    print(os.getcwd())
+    #os.chdir("./functions/")
+    #sys.path.insert(0, "./functions/")
     import time
     import itertools
-    import torch.multiprocessing as mp
-    import tensorflow as tf
+    import multiprocessing as mp
 
+    #Check if GPU is available (for mac) and set device if it is available, else use CPU
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    if device == "mps":
+        print("Using GPU")
+    elif device == "cpu":
+        warnings.warn("GPU unavailable. Consider using dictionaryGeneration script instead.", RuntimeWarning)
 
+    print('Beginning dictionary generation...')
 
-    """   
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-    from tensorflow.compat.v1.keras.backend import set_session
-    config = tf.compat.v1.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.7
-    set_session(tf.compat.v1.Session(config=config))
-    """
-    
-    
-    #For multiprocessing use the number of available cpus  
+#For multiprocessing use the number of available cpus  
     #Currently set to perform differently on my Mac ('Darwin') system vs the cluster
     if platform.system() == "Darwin":
         #If on local computer can use all CPUs
@@ -250,12 +258,10 @@ if __name__ == '__main__':
     #Generate the parameters
     params = parameterGeneration()
     
-    print("Beginning dictionary generation...")
     #Run main function in parallel 
     #Current laptop (2021 M1 Macbook Pro) will have 8 CPUs available
     try:
         pool.map(simulationFunction, params)
-
     finally:
         #Terminate and join the threads after parallelisation is done
         pool.terminate()
