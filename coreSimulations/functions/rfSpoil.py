@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """-----------------------------------------------------------------------------
+Application of an RF spoiling to a Bloch equation simulation with two compartments 
+
 Author: Emma Thomson and Ela Kanani
 Year: 2022-2024
 Institution: Centre for Medical Image Computing: University College London
@@ -12,27 +14,8 @@ import numpy as np
 """---------------------------MAIN FUNCTION--------------------------------------"""
 
 def rf_spoil(vecMArrayTissue, vecMArrayBlood, loop):
-    """
-    Application of an RF spoiling to a Bloch equation simulation with two compartments
 
-    Parameters:
-    -----------
-    vecMArrayTissue : numpy nd array, shape (noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3)
-        Array of magnetization vectors for the tissue compartment
-    vecMArrayBlood : numpy nd array, shape (noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3)
-        Array of magnetization vectors for the blood compartment
-    loop : int
-        Loop number in number of repetitions
-
-    Returns:
-    --------
-    vecMArrayTissue : numpy nd array, shape (noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3)
-        Array of magnetization vectors for the tissue compartment
-    vecMArrayBlood : numpy nd array, shape (noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3)
-        Array of magnetization vectors for the blood compartment
-
-    """
-
+    
     #Using the rf phase formula developed by Zur et al (1991)
     # calculate the phase change for this particular repetition
     alpha0 = (123/360)*2*np.pi

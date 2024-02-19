@@ -42,7 +42,8 @@ def rotation_calculations(positionArrayX, positionArrayY, gradientX, \
     
     #Find gradient field strength from both x and y gradients at each isochromat 
     # position
-    gradientMatrix = gradientX*positionArrayX + gradientY*positionArrayY
+    gradientMatrix = gradientX*positionArrayX 
+    gradientMatrix += gradientY*positionArrayY
 
     # Gyromagnetic ratio for proton 42.6 MHz/T
     omegaArray = np.repeat(np.expand_dims((42.6)*gradientMatrix, axis=2), noOfIsochromatsZ, axis=2)
@@ -51,9 +52,13 @@ def rotation_calculations(positionArrayX, positionArrayY, gradientX, \
     #for each isochromat
     precession = np.zeros([np.size(positionArrayX,0), np.size(positionArrayY,1),noOfIsochromatsZ, 3,3])
     precession[:,:,:,2,2] = 1
-    precession[:,:,:,0,0] = np.cos(omegaArray*deltaT)
-    precession[:,:,:,0,1] = -np.sin(omegaArray*deltaT)
-    precession[:,:,:,1,0] = np.sin(omegaArray*deltaT)
-    precession[:,:,:,1,1] = np.cos(omegaArray*deltaT)
+
+    # compute the trigonometric functions for the rotation matrices
+    cos_omega_deltaT = np.cos(omegaArray*deltaT)
+    sin_omega_deltaT = np.sin(omegaArray*deltaT)
+    precession[:,:,:,0,0] = cos_omega_deltaT
+    precession[:,:,:,0,1] = -sin_omega_deltaT
+    precession[:,:,:,1,0] = sin_omega_deltaT
+    precession[:,:,:,1,1] = cos_omega_deltaT
 
     return precession

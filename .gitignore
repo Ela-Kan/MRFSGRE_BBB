@@ -10,3 +10,7 @@ coreSimulations/functions/.DS_Store
 dictionaries/.DS_Store
 .DS_Store
 *.npy
+.DS_Store
+.DS_Store
+coreSimulations/.DS_Store
+*.pyc

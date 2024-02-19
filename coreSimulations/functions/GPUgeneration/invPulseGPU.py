@@ -15,6 +15,29 @@ import numpy as np
 """---------------------------MAIN FUNCTION--------------------------------------"""
 
 def invpulse(vecMArrayTissue, vecMArrayBlood, loop, noOfIsochromatsZ, multi):
+    """
+    Application of an inversion pulse to a Bloch equation simulation with two compartments
+
+    Parameters:
+    -----------
+    vecMArrayTissue : numpy nd array, shape (noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3)
+        Array of magnetization vectors for the tissue compartment
+    vecMArrayBlood : numpy nd array, shape (noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3)
+        Array of magnetization vectors for the blood compartment
+    loop : int
+        Loop number in number of repetitions (TR)
+    noOfIsochromatsZ : int
+        Number of isochromats in the z direction
+    multi : float
+        Multiplier for the inversion pulse
+
+    Returns:
+    --------
+    vecMArrayTissue : numpy nd array, shape (noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3)
+        Array of magnetization vectors for the tissue compartment
+    vecMArrayBlood : numpy nd array, shape (noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3)
+        Array of magnetization vectors for the blood compartment
+    """
     
     #180 pulse for inversion
     #because the 180 pulse is rubbish multiply value by 0.7

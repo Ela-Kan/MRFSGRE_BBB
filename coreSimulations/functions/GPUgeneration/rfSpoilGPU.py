@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """-----------------------------------------------------------------------------
+Application of an RF spoiling to a Bloch equation simulation with two compartments 
+
 Author: Emma Thomson
 Year: 2022
 Institution: Centre for Medical Image Computing: University College London

@@ -25,6 +25,7 @@ import platform
 import torch
 import warnings
 
+
 #go up a folder
 #os.chdir("..")
 
@@ -198,8 +199,8 @@ def simulationFunction(paramArray):
         List of parameters for one dictionary entry
     """
     
-    sys.path.insert(0, "./functions/GPUgeneration/")
-    from blochSimulationGPU import MRFSGRE
+    sys.path.insert(0, "./functions/")
+    from GPUDictionaryGenerator import GPUDictionaryGenerator
     
     #Is there an inversion pulse
     invSwitch = True
@@ -216,10 +217,15 @@ def simulationFunction(paramArray):
     # t1Array, t2Array, t2StarArray, noOfIsochromatsX, noOfIsochromatsY, 
     # noOfIsochromatsZ, noOfRepetitions, noise, perc, res, multi, inv, 
     # sliceProfileSwitch, samples, dictionaryId, instance
-    MRFSGRE(t1Array, parameters[5], parameters[6],
+
+    #Initialise the dictionary generator
+    dictionaryGenerator =  GPUDictionaryGenerator(t1Array, parameters[5], parameters[6],
             parameters[7], parameters[8], parameters[13],
             parameters[9], parameters[10], parameters[3]/10, parameters[2],
             parameters[4]/100,invSwitch, sliceProfileSwitch, samples, parameters[11], parameters[12])
+    
+    # Run the dictionary generation
+    dictionaryGenerator.MRFSGRE()
     
 
 '''-------------------------MAIN DICTIONARY LOOPS---------------------------'''
@@ -249,15 +255,18 @@ if __name__ == '__main__':
     #Currently set to perform differently on my Mac ('Darwin') system vs the cluster
     if platform.system() == "Darwin":
         #If on local computer can use all CPUs
-        pool = mp.Pool(8)
+        pool = mp.Pool(12)
     else:
         #If on cluster only use a few 
         pool = mp.Pool(8)
     #Start timer
     t0 = time.time()
+
     #Generate the parameters
     params = parameterGeneration()
-    
+ 
+
+
     #Run main function in parallel 
     #Current laptop (2021 M1 Macbook Pro) will have 8 CPUs available
     try:
@@ -273,4 +282,4 @@ if __name__ == '__main__':
     total = t1-t0
     print(total)   
 
-
+# TODO: test if class works
