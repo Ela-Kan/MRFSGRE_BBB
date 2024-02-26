@@ -28,6 +28,10 @@ def rotation_calculations(positionArrayX, positionArrayY, gradientX, \
     #for the precessions generage an array storing the 3x3 rotation matrix 
     #for each isochromat
     precession = np.zeros([np.size(positionArrayX,0), np.size(positionArrayY,1),noOfIsochromatsZ, 3,3])
+    
+    print('POSITION ARRAY X')
+    print((positionArrayX.shape))
+
     precession[:,:,:,2,2] = 1
     precession[:,:,:,0,0] = np.cos(omegaArray*deltaT)
     precession[:,:,:,0,1] = -np.sin(omegaArray*deltaT)

@@ -30,10 +30,13 @@ def applied_precession(gradientDuration, deltaT, gradientX, gradientY,
    
    #Transpose to correct shape
    precession = precession.transpose(1,0,2,4,3)
+
    
    #Separate the large precession array into the blood and tissue compartments
    precessionBlood = precession[:np.size(vecMArrayBlood,0),:, :, :]
    precessionTissue = precession[np.size(vecMArrayBlood,0):,:, :, :]
+
+
    
    #For each time step
    for tStep in range(int(gradientDuration/deltaT)):

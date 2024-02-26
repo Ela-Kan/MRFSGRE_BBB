@@ -5,13 +5,11 @@ import numpy as np
 import sys
 import os
 import platform
-import torch
 import warnings
 from scipy import signal, io
-import time
 
 
-class GPUDictionaryGenerator():
+class DictionaryGeneratorFast():
     # Initialise the class
     def __init__(self, t1Array, t2Array, t2StarArray, noOfIsochromatsX,
                 noOfIsochromatsY, noOfIsochromatsZ, noOfRepetitions, noise, perc, res,
@@ -53,12 +51,6 @@ class GPUDictionaryGenerator():
             Instance number for multiple instances of the same code to run
         
         """    
-
-
-        #Check if GPU is available (for mac) and set device if it is available, else use CPU
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
-        if device == "cpu":
-            warnings.warn("GPU unavailable. Consider using dictionaryGeneration script instead.", RuntimeWarning)
         
         # Set the input arguments as class variables
         self.t1Array = t1Array
@@ -77,8 +69,6 @@ class GPUDictionaryGenerator():
         self.dictionaryId = dictionaryId
         self.instance = instance
 
-
-        
     
         # PARAMETER DECLARATION
 
@@ -87,11 +77,12 @@ class GPUDictionaryGenerator():
         ### TO DO: need to allow for variable slice profile and pulse duration
         self.pulseDuration = 0 #UNIT ms 
         
-        ### calculated position array used for the precession according to spatial gradients     
+        ### calculated position array used for the prcession according to spatial gradients     
         [positionArrayXHold ,positionArrayYHold] = \
-                    torch.meshgrid(torch.arange(self.noOfIsochromatsX, device=device),torch.arange(self.noOfIsochromatsY, device=device), indexing='xy')
-        self.positionArrayX = positionArrayXHold - ((self.noOfIsochromatsX/2))
-        self.positionArrayY = positionArrayYHold - ((self.noOfIsochromatsY/2))
+                    np.meshgrid(range(noOfIsochromatsX),range(noOfIsochromatsY))
+        self.positionArrayX = positionArrayXHold - ((noOfIsochromatsX/2))
+        self.positionArrayY = positionArrayYHold - ((noOfIsochromatsY/2))
+
         
         ### Time increment
         self.deltaT = 1 #ms
@@ -103,7 +94,7 @@ class GPUDictionaryGenerator():
         
 
         ### Set echo time (must be divisible by deltaT) 
-        ## TODO: Need to remove hard coding for TE=2 out of calculation code 
+        ## TO DO: Need to remove hard coding for TE=2 out of calculation code 
         self.TE = 2 #ms   
 
         '''
@@ -111,35 +102,30 @@ class GPUDictionaryGenerator():
         '''
         if sliceProfileSwitch == 1: 
             sliceProfilePath = '../sliceProfile/sliceProfile.mat'
-            sliceProfileArray = io.loadmat(sliceProfilePath)['sliceProfile'].astype(np.float32)
-            # convert to a tensor on the gpu
-            sliceProfileArray = torch.tensor(sliceProfileArray, device=device)
-
+            sliceProfileArray = io.loadmat(sliceProfilePath)['sliceProfile']
             #to give an even sample of the slice profile array 
-            endPoint = sliceProfileArray.size(1)
-            stepSize = (sliceProfileArray.size(1)/2)/self.noOfIsochromatsZ
-            startPoint = sliceProfileArray.size(1)/2 #stepSize/2 
-            profileSamples = torch.arange(startPoint, endPoint, stepSize, dtype=int) # THIS USED TO BE INT #np.round(np.linspace(0+27, np.size(sliceProfileArray,1)-1-27, noOfIsochromatsZ),0)
+            endPoint = np.size(sliceProfileArray, 1)
+            stepSize = (np.size(sliceProfileArray, 1)/2)/(noOfIsochromatsZ)
+            startPoint = (np.size(sliceProfileArray, 1)/2) #stepSize/2 
+            profileSamples = np.arange(startPoint, endPoint, stepSize, dtype=int) #np.round(np.linspace(0+27, np.size(sliceProfileArray,1)-1-27, noOfIsochromatsZ),0)
             #profileSamples = profileSamples.astype(int)
             self.sliceProfile = sliceProfileArray[:,profileSamples]
         else: 
-            #If you want flat slice profile then this (i.e. homogeneous excitation profile across the slice thickness)
-            self.sliceProfile = (torch.unsqueeze(torch.round(torch.linspace(1,90,90*100, device=device)), 1)).tile(1,noOfIsochromatsZ)  
+            #If you want flat slice profile then this (i.e. homogenous excitation profile across the slice thickness)
+            self.sliceProfile = np.tile(np.expand_dims(np.round(np.linspace(1,90,90*100),0), axis=1),noOfIsochromatsZ)   
 
         """---------------------------OPEN ARRAYS-----------------------------"""
-
-        ######################################## HERE
         ### This is defined as a unit vector along the z-axis
-        vecM = torch.tensor([[0],[0],[1]], dtype=torch.float32, device=device)
+        vecM = np.float64([[0],[0],[1]])
         
         ## Define arrays for blood and tissue 
-        self.vecMArrayBlood = (vecM.transpose(0,1)).tile([int(self.perc*self.noOfIsochromatsX/100), self.noOfIsochromatsY, self.noOfIsochromatsZ, 1])
-        self.vecMArrayTissue = (vecM.transpose(0,1)).tile([int(self.noOfIsochromatsX-self.perc*self.noOfIsochromatsX/100), self.noOfIsochromatsY, self.noOfIsochromatsZ, 1])
-
+        self.vecMArrayBlood = np.tile(vecM.T, [int(perc*noOfIsochromatsX/100), noOfIsochromatsY, noOfIsochromatsZ, 1])
+        self.vecMArrayTissue = np.tile(vecM.T, [int(noOfIsochromatsX-perc*noOfIsochromatsX/100), noOfIsochromatsY, noOfIsochromatsZ, 1] )
+            
 
         ### Expand the dimensions for multiplication 
-        self.vecMArrayTissue = torch.unsqueeze(self.vecMArrayTissue, 4)
-        self.vecMArrayBlood = torch.unsqueeze(self.vecMArrayBlood, 4)
+        self.vecMArrayTissue = np.expand_dims(self.vecMArrayTissue, axis=4)
+        self.vecMArrayBlood = np.expand_dims(self.vecMArrayBlood, axis=4)
 
         ### FA array
         faString = './functions/holdArrays/faArray_' + str(instance) + '.npy'
@@ -151,12 +137,12 @@ class GPUDictionaryGenerator():
         # Rounding is required in order to assure that TR is divisable by deltaT
         self.trRound = np.round(trArray, 0)
         
-        ### Open noise sample array and send to GPU
+        ### Open noise sample array
         self.noiseArray = np.load('./functions/holdArrays/noiseSamples.npy')
-        self.noiseArray = torch.from_numpy(self.noiseArray.astype(np.float32)).to(device)
         
         ### Empty signal array to store all magnitization at all time points 
-        self.signal = torch.zeros([self.noOfIsochromatsX, self.noOfIsochromatsY, self.noOfIsochromatsZ, 3, self.noOfRepetitions], device=device)
+        self.signal = np.zeros([noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3, noOfRepetitions])
+
 
         '''
         PEAK LOCATIONS
@@ -171,7 +157,7 @@ class GPUDictionaryGenerator():
                 self.signalDivide[r] = (sum(self.trRound[:r])+self.TE+self.pulseDuration)/self.deltaT 
         
         return None 
-    
+
     
     def invpulse(self, loop):
         """
@@ -197,35 +183,29 @@ class GPUDictionaryGenerator():
         vecMArrayBlood : numpy nd array, shape (noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3)
             Array of magnetization vectors for the blood compartment
         """
-
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
         
         #180 pulse for inversion
         #because the 180 pulse is rubbish multiply value by 0.7
         #this is extremely crude - need to add either another parameter 
         # or manually code the IR pulse in the sequence code
-
-        #TODO: The for loop is redundant here, remove it for speed
-
         thetaX = np.pi*self.multi*0.8*np.ones([self.noOfIsochromatsZ])
         
-        rotX = torch.zeros([len(thetaX),3,3], device=device)
-        rotY = torch.zeros([len(thetaX),3,3], device=device)
+        rotX = np.zeros([len(thetaX),3,3])
+        rotY = np.zeros([len(thetaX),3,3])
         #rotation (pulse) flips spins from aligned with the z-axis to
         #aligned with the x-axis
         #Rotates around the x axis
         for theta in range(len(thetaX)):
-            rotX[theta,:,:] =torch.tensor([[1., 0., 0.], [0, np.cos(thetaX[theta]), np.sin(thetaX[theta])], \
+            rotX[theta,:,:] = np.array([[1, 0, 0], [0, np.cos(thetaX[theta]), np.sin(thetaX[theta])], \
                             [0, -np.sin(thetaX[theta]), np.cos(thetaX[theta])]])
-            rotY[theta,:,:] = torch.tensor([[1., 0., 0.],[0., 1., 0.],[0., 0., 1.]])
-        vecMRotation = torch.matmul(rotY,rotX) 
-        
+            rotY[theta,:,:] = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
+        vecMRotation = np.matmul(rotY,rotX) 
 
         # Updating the magnetization vector matricies
         #For tissue
-        self.vecMArrayTissue = torch.matmul(vecMRotation,self.vecMArrayTissue)
+        self.vecMArrayTissue = np.matmul(vecMRotation,self.vecMArrayTissue)
         #For blood 
-        self.vecMArrayBlood = torch.matmul(vecMRotation,self.vecMArrayBlood)
+        self.vecMArrayBlood = np.matmul(vecMRotation,self.vecMArrayBlood)
 
         return None
     
@@ -336,8 +316,6 @@ class GPUDictionaryGenerator():
             Array of magnetization vectors for the blood compartment
         
         """
-
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
         
         faInt = int(self.faArray[loop]*100)
         #Extract the flip angle of this loop (degrees)
@@ -351,41 +329,25 @@ class GPUDictionaryGenerator():
         
         #Convert to radians
         thetaX = ((fa/360)*2*np.pi)  
-
-        rotX = torch.zeros([len(thetaX),3,3], device=device)
-        rotY = torch.zeros([len(thetaX),3,3], device=device)
         
-        if fa.dtype != 'float64': # different cases have different dtypes
-            #rotation (pulse) flips spins from aligned with the z-axis to
-            #aligned with the x-axis
-            #Rotates around the x axis  
-            for theta in range(len(thetaX)):
-                rotX[theta,:,:] = torch.tensor([[1., 0., 0.], [0., torch.cos(thetaX[theta]), torch.sin(thetaX[theta])], \
-                                [0., -torch.sin(thetaX[theta]), torch.cos(thetaX[theta])]])
-                rotY[theta,:,:] = torch.tensor([[1., 0., 0.],[0., 1., 0.],[0., 0., 1.]])
-
-        else:
-            #rotation (pulse) flips spins from aligned with the z-axis to
-            #aligned with the x-axis
-            #Rotates around the x axis  
-            for theta in range(len(thetaX)):
-                rotX[theta,:,:] = torch.tensor([[1., 0., 0.], [0., np.cos(thetaX[theta]), np.sin(thetaX[theta])], \
-                                [0., -np.sin(thetaX[theta]), np.cos(thetaX[theta])]])
-                rotY[theta,:,:] = torch.tensor([[1., 0., 0.],[0., 1., 0.],[0., 0., 1.]])
-
-
+        rotX = np.zeros([len(thetaX),3,3])
+        rotY = np.zeros([len(thetaX),3,3])
+        #rotation (pulse) flips spins from aligned with the z-axis to
+        #aligned with the x-axis
+        #Rotates around the x axis  
+        for theta in range(len(thetaX)):
+            rotX[theta,:,:] = np.array([[1, 0, 0], [0, np.cos(thetaX[theta]), np.sin(thetaX[theta])], \
+                            [0, -np.sin(thetaX[theta]), np.cos(thetaX[theta])]])
+            rotY[theta,:,:] = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
 
         #Combined rotation (in this case same as rotX)
-        vecMRotation = torch.matmul(rotY,rotX) 
+        vecMRotation = np.matmul(rotY,rotX) 
 
         # Updating the magnetization vector matricies
         #For tissue
-        self.vecMArrayTissue = torch.matmul(vecMRotation, self.vecMArrayTissue)
+        self.vecMArrayTissue = np.matmul(vecMRotation, self.vecMArrayTissue)
         #For blood 
-        self.vecMArrayBlood = torch.matmul(vecMRotation, self.vecMArrayBlood)
-
-
-
+        self.vecMArrayBlood = np.matmul(vecMRotation, self.vecMArrayBlood)
 
         return None
     
@@ -411,29 +373,27 @@ class GPUDictionaryGenerator():
 
         """
 
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
-
         #Using the rf phase formula developed by Zur et al (1991)
         # calculate the phase change for this particular repetition
         alpha0 = (123/360)*2*np.pi
         thetaZ = 0.5*alpha0*(loop**2+loop+2)
         
         #Rotation matrices for this rotation
-        rotX = torch.tensor([[1., 0., 0.],[0., 1., 0.],[0., 0., 1.]], device=device)
-        rotY = torch.tensor([[np.cos(thetaZ).astype(np.float32), -np.sin(thetaZ).astype(np.float32), 0.],\
-                            [np.sin(thetaZ).astype(np.float32), np.cos(thetaZ).astype(np.float32), 0.],\
-                            [0., 0., 1.]], device=device)
+        rotX = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
+        rotY = np.array([[np.cos(thetaZ), -np.sin(thetaZ), 0],\
+                            [np.sin(thetaZ), np.cos(thetaZ), 0],\
+                            [0, 0, 1]])
         #Combined rotation (in this case same as rotY)
-        vecMIsochromatHold = torch.matmul(rotY,rotX)
+        vecMIsochromatHold = np.matmul(rotY,rotX)
         # Updating the matrix so each time only the incremental rotation is
         # calculated. 
-        vecMIsochromatHold = torch.matmul(rotY,rotX)
+        vecMIsochromatHold = np.matmul(rotY,rotX)
             
         # Updating the magnetization vector matricies
         #For tissue
-        self.vecMArrayTissue = torch.matmul(vecMIsochromatHold, self.vecMArrayTissue)
+        self.vecMArrayTissue = np.matmul(vecMIsochromatHold, self.vecMArrayTissue)
         #For blood 
-        self.vecMArrayBlood = torch.matmul(vecMIsochromatHold,self.vecMArrayBlood)
+        self.vecMArrayBlood = np.matmul(vecMIsochromatHold,self.vecMArrayBlood)
 
         return None
 
@@ -464,8 +424,6 @@ class GPUDictionaryGenerator():
             Array of rotation matrices [3 x 3] for each isochromat
         
         """
-
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
         
         #Find gradient field strength from both x and y gradients at each isochromat 
         # position
@@ -473,17 +431,16 @@ class GPUDictionaryGenerator():
         gradientMatrix += self.gradientY*self.positionArrayY
 
         # Gyromagnetic ratio for proton 42.6 MHz/T
-        omegaArray = torch.unsqueeze((42.6)*gradientMatrix, axis=2).repeat_interleave(self.noOfIsochromatsZ,dim=2)
+        omegaArray = np.repeat(np.expand_dims((42.6)*gradientMatrix, axis=2), self.noOfIsochromatsZ, axis=2)
 
         #for the precessions generate an array storing the 3x3 rotation matrix 
         #for each isochromat
-        precession = torch.zeros([(self.positionArrayX).size(dim=0), self.positionArrayY.size(dim=1), self.noOfIsochromatsZ, 3,3], device=device)
-
+        precession = np.zeros([np.size(self.positionArrayX,0), np.size(self.positionArrayY,1),self.noOfIsochromatsZ, 3,3])
         precession[:,:,:,2,2] = 1
 
         # compute the trigonometric functions for the rotation matrices
-        cos_omega_deltaT = torch.cos(omegaArray*self.deltaT)
-        sin_omega_deltaT = torch.sin(omegaArray*self.deltaT)
+        cos_omega_deltaT = np.cos(omegaArray*self.deltaT)
+        sin_omega_deltaT = np.sin(omegaArray*self.deltaT)
         precession[:,:,:,0,0] = cos_omega_deltaT
         precession[:,:,:,0,1] = -sin_omega_deltaT
         precession[:,:,:,1,0] = sin_omega_deltaT
@@ -546,11 +503,11 @@ class GPUDictionaryGenerator():
         
         
         #Transpose to correct shape
-        precession = precession.permute(1,0,2,4,3)
+        precession = precession.transpose(1,0,2,4,3)
         
         #Separate the large precession array into the blood and tissue compartments
-        precessionBlood = precession[:self.vecMArrayBlood.size(dim=0),:, :, :]
-        precessionTissue = precession[self.vecMArrayBlood.size(dim=0):,:, :, :]
+        precessionBlood = precession[:np.size(self.vecMArrayBlood,0),:, :, :]
+        precessionTissue = precession[np.size(self.vecMArrayBlood,0):,:, :, :]
         
         #For each time step
         for tStep in range(int(gradientDuration/self.deltaT)):
@@ -564,17 +521,13 @@ class GPUDictionaryGenerator():
                 t2Star = self.t2StarArray[0]
                 
                 #Multiply by the precession rotation matrix (incremental for each deltaT)
-                vecMIsochromat =torch.matmul(precessionTissue, self.vecMArrayTissue)
+                vecMIsochromat = np.matmul(precessionTissue, self.vecMArrayTissue)
 
                 # The magnitude change due to relaxation is then applied to each
                 # coordinate
-                exp_constT2star = np.exp((-self.deltaT)/t2Star)
-                exp_constT1 = (1-np.exp(-self.deltaT/t1))*1
-                exp_constT1_2 = (np.exp(-self.deltaT/t1))
-
-                vecMIsochromat[:,:,:,0,:] = exp_constT2star*vecMIsochromat[:,:,:,0,:]
-                vecMIsochromat[:,:,:,1,:] = exp_constT2star*vecMIsochromat[:,:,:,1,:]
-                vecMIsochromat[:,:,:,2,:] = exp_constT1 + vecMIsochromat[:,:,:,2,:]*exp_constT1_2
+                vecMIsochromat[:,:,:,0,:] = np.exp((-self.deltaT)/t2Star)*vecMIsochromat[:,:,:,0,:]
+                vecMIsochromat[:,:,:,1,:] = np.exp((-self.deltaT)/t2Star)*vecMIsochromat[:,:,:,1,:]
+                vecMIsochromat[:,:,:,2,:] = (1-np.exp(-self.deltaT/t1))*1 + vecMIsochromat[:,:,:,2,:]*(np.exp(-self.deltaT/t1))
                 #The stored array is then updated
                 self.vecMArrayTissue = vecMIsochromat
 
@@ -584,20 +537,20 @@ class GPUDictionaryGenerator():
                 t2Star = self.t2StarArray[1]
                 
                 #Multiply by the precession rotation matrix (incremental for each deltaT)
-                vecMIsochromat = torch.matmul(precessionBlood, self.vecMArrayBlood)
+                vecMIsochromat = np.matmul(precessionBlood, self.vecMArrayBlood)
 
                 # The magnitude change due to relaxation is then applied to each
                 # coordinate
-                vecMIsochromat[:,:,:,0,:] = vecMIsochromat[:,:,:,0,:]*exp_constT2star
-                vecMIsochromat[:,:,:,1,:] = exp_constT2star*vecMIsochromat[:,:,:,1,:]
-                vecMIsochromat[:,:,:,2,:] = exp_constT1 + vecMIsochromat[:,:,:,2,:]*exp_constT1_2
+                vecMIsochromat[:,:,:,0,:] = vecMIsochromat[:,:,:,0,:]*np.exp((-self.deltaT)/t2Star)
+                vecMIsochromat[:,:,:,1,:] = np.exp((-self.deltaT)/t2Star)*vecMIsochromat[:,:,:,1,:]
+                vecMIsochromat[:,:,:,2,:] = (1-np.exp(-self.deltaT/t1))*1 + vecMIsochromat[:,:,:,2,:]*(np.exp(-self.deltaT/t1))
                 #The stored array is then updated
                 self.vecMArrayBlood= vecMIsochromat
                 
                 #Combine tissue and blood compartments to give the total magnetization 
                 # vector array
                 vecMArray = self.vecMArrayTissue
-                vecMArray = torch.cat((vecMArray,self.vecMArrayBlood),axis=0)
+                vecMArray = np.concatenate((vecMArray,self.vecMArrayBlood),axis=0)
 
                 #If the total time that has passed corresponds to the time at which
                 # there is an echo peak:
@@ -607,7 +560,7 @@ class GPUDictionaryGenerator():
                     ind = signalDivide.index(int(totalTime/self.deltaT))
                     #Then input the magentization array at that time into the siganl
                     # holder array
-                    self.signal[:,0,:,:,ind] = torch.squeeze(vecMArray)
+                    self.signal[:,0,:,:,ind] = np.squeeze(vecMArray)
 
         return totalTime
 
@@ -632,8 +585,6 @@ class GPUDictionaryGenerator():
         signalNoisy : numpy nd array, shape (noOfRepetitions, noise)
             Noisy signal array (magnitude of magnetization at echo time for each noise level)
         """
-
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
     
         """Gradient parameters"""
         # Maximum gradient height
@@ -706,9 +657,9 @@ class GPUDictionaryGenerator():
             exch = exch*1
             indBlood = np.argwhere(exch == 1)[:,:3]
             # Chose random isochromat to exchange with
-            randsX = np.random.randint(0, self.vecMArrayTissue.size(dim=0), int(np.size(np.argwhere(exch == 1),0)))
-            randsY = np.random.randint(0, self.vecMArrayTissue.size(dim=1), int(np.size(np.argwhere(exch == 1),0)))
-            randsZ = np.random.randint(0, self.vecMArrayTissue.size(dim=2), int(np.size(np.argwhere(exch == 1),0)))
+            randsX = np.random.randint(0, np.size(self.vecMArrayTissue,0), int(np.size(np.argwhere(exch == 1),0)))
+            randsY = np.random.randint(0, np.size(self.vecMArrayTissue,1), int(np.size(np.argwhere(exch == 1),0)))
+            randsZ = np.random.randint(0, np.size(self.vecMArrayTissue,2), int(np.size(np.argwhere(exch == 1),0)))
             # Swap
             for change in range(int(np.size(np.argwhere(exch == 1),0))):
                 hold = self.vecMArrayBlood[indBlood[change,0],indBlood[change,1],indBlood[change,2],:]
@@ -770,49 +721,50 @@ class GPUDictionaryGenerator():
         addedNoise = self.noiseArray[noiseSamples,:,:self.noise]
 
         #Transpose to fix shape
-        addedNoise = addedNoise.permute(2,0,1)
+        addedNoise = np.transpose(addedNoise, (2,0,1))
         
         #Expand arrays to account for noise levels and samples
-        vecPeaks = torch.unsqueeze(self.signal,axis=5).tile(self.noise)
+        vecPeaks = np.expand_dims(self.signal,axis=5)
+        vecPeaks = np.tile(vecPeaks, [self.noise])
         
         #signal save file name
         signalName = 'echo_' + str(self.t1Array[0]) + '_' + str(self.t1Array[1]) + '_'  \
         + str(self.res) + '_' + str(self.perc) + '_' + str(self.multi) + '_'
         
         #Open noisy signal array
-        signalNoisy = torch.zeros([self.noOfRepetitions,self.noise], device=device)
+        signalNoisy = np.zeros([self.noOfRepetitions,self.noise])
 
         #For each requested noise level
         for samp in range(self.samples):
             #Find the magnitude for the Mx and My components for the magnetization
             # vector and add noise
             try:
-                signalNoisyX = (torch.squeeze((torch.sum(torch.sum(torch.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0))) + 
+                signalNoisyX = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0))) + 
                                 (self.noOfIsochromatsX*self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))*
-                                torch.transpose(addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions* (samp+1),0], 0, 1))
+                                np.transpose(addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions* (samp+1),0]))
                 
-                signalNoisyY = (torch.squeeze((torch.sum(torch.sum(torch.sum(vecPeaks[:,:,:,1,:], axis=0), axis=0),axis=0)))
-                + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))*torch.transpose(
-                    addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions * (samp+1),1], 0, 1))
+                signalNoisyY = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,1,:], axis=0), axis=0),axis=0)))
+                + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))*np.transpose(
+                    addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions * (samp+1),1]))
 
                 #Find the total magitude of M 
-                signalNoisy[:,:] = torch.sqrt((signalNoisyX)**2 + (signalNoisyY)**2)
+                signalNoisy[:,:] = np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2)
                 
             except:
-                signalNoisyX = (torch.squeeze((torch.sum(torch.sum(torch.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0)))
+                signalNoisyX = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0)))
                 + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY)) * (
                     addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions*(samp+1),0]))
                 
-                signalNoisyY = (torch.squeeze((torch.sum(torch.sum(torch.sum(vecPeaks[:,:,:,1,:], axis=0), axis=0),axis=0))) 
+                signalNoisyY = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,1,:], axis=0), axis=0),axis=0))) 
                 + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))* (
                     addedNoise[:,self.noOfRepetitions*samp:self.noOfRepetitions*(samp+1),1]))
                 
                 #Find the total magitude of M 
-                signalNoisy[:,:] = torch.transpose(torch.sqrt((signalNoisyX)**2 + (signalNoisyY)**2), 0, 1)
+                signalNoisy[:,:] = np.transpose(np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2))
                 
-            #Save signal after sending back to cpu     
+            #Save signal         
             name = '../dictionaries/Dictionary' + self.dictionaryId +'/' + signalName + str(samp + 1)
-            np.save(name, signalNoisy.to('cpu').numpy())
+            np.save(name, signalNoisy)
 
 
         return signalNoisy
