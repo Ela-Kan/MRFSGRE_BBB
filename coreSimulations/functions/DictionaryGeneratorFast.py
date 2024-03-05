@@ -7,6 +7,9 @@ import os
 import platform
 import warnings
 from scipy import signal, io
+import numba_helper as nbh
+from line_profiler import LineProfiler
+
 
 
 class DictionaryGeneratorFast():
@@ -116,7 +119,7 @@ class DictionaryGeneratorFast():
 
         """---------------------------OPEN ARRAYS-----------------------------"""
         ### This is defined as a unit vector along the z-axis
-        vecM = np.float64([[0],[0],[1]])
+        vecM = np.float32([[0],[0],[1]])
         
         ## Define arrays for blood and tissue 
         self.vecMArrayBlood = np.tile(vecM.T, [int(perc*noOfIsochromatsX/100), noOfIsochromatsY, noOfIsochromatsZ, 1])
@@ -188,18 +191,28 @@ class DictionaryGeneratorFast():
         #because the 180 pulse is rubbish multiply value by 0.7
         #this is extremely crude - need to add either another parameter 
         # or manually code the IR pulse in the sequence code
-        thetaX = np.pi*self.multi*0.8*np.ones([self.noOfIsochromatsZ])
+        #thetaX = np.pi*self.multi*0.8*np.ones([self.noOfIsochromatsZ])
         
+        thetaX = np.pi*self.multi*0.8
+        
+        """
         rotX = np.zeros([len(thetaX),3,3])
-        rotY = np.zeros([len(thetaX),3,3])
+
         #rotation (pulse) flips spins from aligned with the z-axis to
         #aligned with the x-axis
-        #Rotates around the x axis
+        #Rotates around the x axis, no rotY because it is redundant ID matrix
         for theta in range(len(thetaX)):
             rotX[theta,:,:] = np.array([[1, 0, 0], [0, np.cos(thetaX[theta]), np.sin(thetaX[theta])], \
                             [0, -np.sin(thetaX[theta]), np.cos(thetaX[theta])]])
             rotY[theta,:,:] = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
         vecMRotation = np.matmul(rotY,rotX) 
+
+        """
+
+        vecMRotation = np.array([[1, 0, 0], [0, np.cos(thetaX), np.sin(thetaX)], \
+                                            [0, -np.sin(thetaX), np.cos(thetaX)]])
+        
+        vecMRotation = np.tile(vecMRotation,(self.noOfIsochromatsZ,1,1))
 
         # Updating the magnetization vector matricies
         #For tissue
@@ -331,6 +344,7 @@ class DictionaryGeneratorFast():
         thetaX = ((fa/360)*2*np.pi)  
         
         rotX = np.zeros([len(thetaX),3,3])
+        """NOTE: rotY is redundant because it is an identity matrix
         rotY = np.zeros([len(thetaX),3,3])
         #rotation (pulse) flips spins from aligned with the z-axis to
         #aligned with the x-axis
@@ -343,11 +357,21 @@ class DictionaryGeneratorFast():
         #Combined rotation (in this case same as rotX)
         vecMRotation = np.matmul(rotY,rotX) 
 
+        """ 
+
+        #rotation (pulse) flips spins from aligned with the z-axis to
+        #aligned with the x-axis
+        #Rotates around the x axis  
+        for theta in range(len(thetaX)):
+            rotX[theta,:,:] = np.array([[1, 0, 0], [0, np.cos(thetaX[theta]), np.sin(thetaX[theta])], \
+                            [0, -np.sin(thetaX[theta]), np.cos(thetaX[theta])]])
+  
+
         # Updating the magnetization vector matricies
         #For tissue
-        self.vecMArrayTissue = np.matmul(vecMRotation, self.vecMArrayTissue)
+        self.vecMArrayTissue = np.matmul(rotX, self.vecMArrayTissue)
         #For blood 
-        self.vecMArrayBlood = np.matmul(vecMRotation, self.vecMArrayBlood)
+        self.vecMArrayBlood = np.matmul(rotX, self.vecMArrayBlood)
 
         return None
     
@@ -396,7 +420,7 @@ class DictionaryGeneratorFast():
         self.vecMArrayBlood = np.matmul(vecMIsochromatHold,self.vecMArrayBlood)
 
         return None
-
+    
     def rotation_calculations(self):
         """
         Calculation of the rotation matrices for each isochromat in a two compartment 
@@ -447,7 +471,7 @@ class DictionaryGeneratorFast():
         precession[:,:,:,1,1] = cos_omega_deltaT
 
         return precession
-   
+    
     def applied_precession(self, gradientDuration, totalTime):
         """
         Calculation of the precession of isochormats during the application of gradients
@@ -486,9 +510,9 @@ class DictionaryGeneratorFast():
         
         Returns:
         --------
-        vecMArrayTissue : numpy nd array, shape (noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3)
+        vecMArrayTissue : numpy nd array, shape (noOfIsochromatsX in tissue, noOfIsochromatsY, noOfIsochromatsZ, 3)
             Array of magnetization vectors for the tissue compartment
-        vecMArrayBlood : numpy nd array, shape (noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3)
+        vecMArrayBlood : numpy nd array, shape (noOfIsochromatsX in blood, noOfIsochromatsY, noOfIsochromatsZ, 3)
             Array of magnetization vectors for the blood compartment
         signal : numpy nd array, shape (noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3, noOfRepetitions)
             Array of signal to store all magnetisation at all time points 
@@ -500,7 +524,7 @@ class DictionaryGeneratorFast():
         #Calculate the rotation matrices with different spatial matrices for each isochromat
         #in the array
         precession = self.rotation_calculations()
-        
+
         
         #Transpose to correct shape
         precession = precession.transpose(1,0,2,4,3)
@@ -508,45 +532,56 @@ class DictionaryGeneratorFast():
         #Separate the large precession array into the blood and tissue compartments
         precessionBlood = precession[:np.size(self.vecMArrayBlood,0),:, :, :]
         precessionTissue = precession[np.size(self.vecMArrayBlood,0):,:, :, :]
+
+        # Pre calculate the exponential multipliers
+        #For the tissue compartment
+        #Set the relavent T1 and T2*
+        t1 = self.t1Array[0]
+        t2Star = self.t2StarArray[0]
+        exp_delta_t_t2_star_tissue = np.exp((-self.deltaT)/t2Star)
+        exp_delta_t_t1_tissue = (np.exp(-self.deltaT/t1))
+        one_minus_exp_delta_t_t1_tissue = (1-np.exp(-self.deltaT/t1))
+
+        #For the blood compartment
+        #Set the relavent T1 and T2*
+        t1 = self.t1Array[1]
+        t2Star = self.t2StarArray[1]
+        exp_delta_t_t2_star_blood = np.exp((-self.deltaT)/t2Star)
+        exp_delta_t_t1_blood = (np.exp(-self.deltaT/t1))
+        one_minus_exp_delta_t_t1_blood = (1-np.exp(-self.deltaT/t1))
         
+
         #For each time step
         for tStep in range(int(gradientDuration/self.deltaT)):
             
                 #Update time passed
                 totalTime = totalTime + self.deltaT
-            
-                #For the tissue compartment
-                #Set the relavent T1 and T2*
-                t1 = self.t1Array[0]
-                t2Star = self.t2StarArray[0]
+        
                 
                 #Multiply by the precession rotation matrix (incremental for each deltaT)
-                vecMIsochromat = np.matmul(precessionTissue, self.vecMArrayTissue)
-
+                #vecMIsochromat = np.matmul(precessionTissue, self.vecMArrayTissue)
+                vecMIsochromat = np.einsum("...ij,...j", precessionTissue, self.vecMArrayTissue[..., 0])[..., None]
+                
                 # The magnitude change due to relaxation is then applied to each
                 # coordinate
-                vecMIsochromat[:,:,:,0,:] = np.exp((-self.deltaT)/t2Star)*vecMIsochromat[:,:,:,0,:]
-                vecMIsochromat[:,:,:,1,:] = np.exp((-self.deltaT)/t2Star)*vecMIsochromat[:,:,:,1,:]
-                vecMIsochromat[:,:,:,2,:] = (1-np.exp(-self.deltaT/t1))*1 + vecMIsochromat[:,:,:,2,:]*(np.exp(-self.deltaT/t1))
+                vecMIsochromat[:,:,:,0,:] *= exp_delta_t_t2_star_tissue
+                vecMIsochromat[:,:,:,1,:] *= exp_delta_t_t2_star_tissue
+                vecMIsochromat[:,:,:,2,:] = one_minus_exp_delta_t_t1_tissue + vecMIsochromat[:,:,:,2,:]*exp_delta_t_t1_tissue
                 #The stored array is then updated
                 self.vecMArrayTissue = vecMIsochromat
 
-                #For the blood compartment
-                #Set the relavent T1 and T2*
-                t1 = self.t1Array[1]
-                t2Star = self.t2StarArray[1]
-                
                 #Multiply by the precession rotation matrix (incremental for each deltaT)
-                vecMIsochromat = np.matmul(precessionBlood, self.vecMArrayBlood)
+                #vecMIsochromat = np.matmul(precessionBlood, self.vecMArrayBlood)
+                vecMIsochromat = np.einsum("...ij,...j", precessionBlood, self.vecMArrayBlood[..., 0])[..., None]
 
                 # The magnitude change due to relaxation is then applied to each
                 # coordinate
-                vecMIsochromat[:,:,:,0,:] = vecMIsochromat[:,:,:,0,:]*np.exp((-self.deltaT)/t2Star)
-                vecMIsochromat[:,:,:,1,:] = np.exp((-self.deltaT)/t2Star)*vecMIsochromat[:,:,:,1,:]
-                vecMIsochromat[:,:,:,2,:] = (1-np.exp(-self.deltaT/t1))*1 + vecMIsochromat[:,:,:,2,:]*(np.exp(-self.deltaT/t1))
+                vecMIsochromat[:,:,:,0,:] *= exp_delta_t_t2_star_blood
+                vecMIsochromat[:,:,:,1,:] *= exp_delta_t_t2_star_blood
+                vecMIsochromat[:,:,:,2,:] = one_minus_exp_delta_t_t1_blood + vecMIsochromat[:,:,:,2,:]*exp_delta_t_t1_blood
                 #The stored array is then updated
-                self.vecMArrayBlood= vecMIsochromat
-                
+                self.vecMArrayBlood = vecMIsochromat
+
                 #Combine tissue and blood compartments to give the total magnetization 
                 # vector array
                 vecMArray = self.vecMArrayTissue
@@ -561,6 +596,7 @@ class DictionaryGeneratorFast():
                     #Then input the magentization array at that time into the siganl
                     # holder array
                     self.signal[:,0,:,:,ind] = np.squeeze(vecMArray)
+                
 
         return totalTime
 
@@ -660,11 +696,13 @@ class DictionaryGeneratorFast():
             randsX = np.random.randint(0, np.size(self.vecMArrayTissue,0), int(np.size(np.argwhere(exch == 1),0)))
             randsY = np.random.randint(0, np.size(self.vecMArrayTissue,1), int(np.size(np.argwhere(exch == 1),0)))
             randsZ = np.random.randint(0, np.size(self.vecMArrayTissue,2), int(np.size(np.argwhere(exch == 1),0)))
+
+
             # Swap
             for change in range(int(np.size(np.argwhere(exch == 1),0))):
-                hold = self.vecMArrayBlood[indBlood[change,0],indBlood[change,1],indBlood[change,2],:]
-                self.vecMArrayBlood[indBlood[change,0],indBlood[change,1],indBlood[change,2]] = self.vecMArrayTissue[randsX[change],randsY[change],randsZ[change],:]
-                self.vecMArrayTissue[randsX[change],randsY[change],randsZ[change],:] = hold 
+                self.vecMArrayBlood[indBlood[change,0],indBlood[change,1],indBlood[change,2],:], self.vecMArrayTissue[randsX[change],randsY[change],randsZ[change],:] = \
+                    self.vecMArrayTissue[randsX[change],randsY[change],randsZ[change],:], self.vecMArrayBlood[indBlood[change,0],indBlood[change,1],indBlood[change,2],:]  
+
                 
             # reset time array
             reset = cum - rands
@@ -687,6 +725,16 @@ class DictionaryGeneratorFast():
             ## FIRST SHORT GRADIENT
             #Precession occuring during gradient application 
             #Accounts for relaxation and applies precession to the vecM
+            """
+            lp = LineProfiler()
+            lp.add_function(self.applied_precession)
+            lp_wrapper = lp(self.applied_precession)
+            totalTime = lp_wrapper(firstGradientDuration, totalTime)
+            lp.dump_stats("profile_results.txt")
+            lp.print_stats()
+            """
+
+
             totalTime = self.applied_precession(firstGradientDuration, totalTime)
             
             #Apply second gradient lobe (traversing k-space)       

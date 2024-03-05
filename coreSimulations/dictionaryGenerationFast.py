@@ -26,7 +26,7 @@ import warnings
 import io
 import cProfile
 import pstats
-
+from line_profiler import LineProfiler
 
 #go up a folder
 #os.chdir("..")
@@ -95,7 +95,7 @@ def parameterGeneration():
     #In folder will show as "DictionaryXXX" 
     #This folder needs to already exist or code will not run 
 
-    dictionaryId  = 'GPU'
+    dictionaryId  = 'Fast'
 
     ## SHAPE OF VARIATIONS
     
@@ -228,13 +228,13 @@ def simulationFunction(paramArray):
     
     profile = True # Set to True to profile the function to test for bottle necks (default is False)
 
-    if profile == True:
+    if profile == False:
         # Create a Profile object
         pr = cProfile.Profile()
         # Enable profiling
         pr.enable()
     
-        # Run the dictionary generation
+        # Run the dictionary gener ation
         dictionaryGenerator.MRFSGRE()
         
         # Disable profiling
@@ -248,9 +248,16 @@ def simulationFunction(paramArray):
         print(s.getvalue())
 
     else:
+        """
         # Run the dictionary generation
+        lp = LineProfiler()
+        lp.add_function(dictionaryGenerator.MRFSGRE)
+        wrapper = lp(dictionaryGenerator.MRFSGRE)
+        wrapper()   
+        lp.dump_stats("profile_results.txt")
+        lp.print_stats()
+        """
         dictionaryGenerator.MRFSGRE()
-
     # Return the result
     return None
 
@@ -276,7 +283,7 @@ if __name__ == '__main__':
     #Currently set to perform differently on my Mac ('Darwin') system vs the cluster
     if platform.system() == "Darwin":
         #If on local computer can use all CPUs
-        pool = mp.Pool(12)
+        pool = mp.Pool(12) #12
     else:
         #If on cluster only use a few 
         pool = mp.Pool(8)
