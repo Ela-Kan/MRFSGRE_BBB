@@ -216,9 +216,11 @@ class DictionaryGeneratorFast():
 
         # Updating the magnetization vector matricies
         #For tissue
-        self.vecMArrayTissue = np.matmul(vecMRotation,self.vecMArrayTissue)
+        #self.vecMArrayTissue = np.matmul(vecMRotation,self.vecMArrayTissue)
+        self.vecMArrayTissue = np.einsum("...ij,...j", vecMRotation, self.vecMArrayTissue[..., 0])[..., None]
         #For blood 
-        self.vecMArrayBlood = np.matmul(vecMRotation,self.vecMArrayBlood)
+        #self.vecMArrayBlood = np.matmul(vecMRotation,self.vecMArrayBlood)
+        self.vecMArrayBlood = np.einsum("...ij,...j", vecMRotation, self.vecMArrayBlood[..., 0])[..., None]
 
         return None
     
@@ -363,15 +365,20 @@ class DictionaryGeneratorFast():
         #aligned with the x-axis
         #Rotates around the x axis  
         for theta in range(len(thetaX)):
-            rotX[theta,:,:] = np.array([[1, 0, 0], [0, np.cos(thetaX[theta]), np.sin(thetaX[theta])], \
-                            [0, -np.sin(thetaX[theta]), np.cos(thetaX[theta])]])
+            cos_thetaX = np.cos(thetaX[theta])
+            sin_thetaX = np.sin(thetaX[theta])
+            rotX[theta,:,:] = np.array([[1, 0, 0], [0, cos_thetaX, sin_thetaX], \
+                                        [0, -sin_thetaX, cos_thetaX]])
+            
   
 
         # Updating the magnetization vector matricies
         #For tissue
-        self.vecMArrayTissue = np.matmul(rotX, self.vecMArrayTissue)
+        #self.vecMArrayTissue = np.matmul(rotX, self.vecMArrayTissue)
+        self.vecMArrayTissue = np.einsum("...ij,...j", rotX, self.vecMArrayTissue[..., 0])[..., None]
         #For blood 
-        self.vecMArrayBlood = np.matmul(rotX, self.vecMArrayBlood)
+        #self.vecMArrayBlood = np.matmul(rotX, self.vecMArrayBlood)
+        self.vecMArrayBlood = np.einsum("...ij,...j", rotX, self.vecMArrayBlood[..., 0])[..., None]
 
         return None
     
@@ -402,6 +409,7 @@ class DictionaryGeneratorFast():
         alpha0 = (123/360)*2*np.pi
         thetaZ = 0.5*alpha0*(loop**2+loop+2)
         
+        """
         #Rotation matrices for this rotation
         rotX = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
         rotY = np.array([[np.cos(thetaZ), -np.sin(thetaZ), 0],\
@@ -411,13 +419,21 @@ class DictionaryGeneratorFast():
         vecMIsochromatHold = np.matmul(rotY,rotX)
         # Updating the matrix so each time only the incremental rotation is
         # calculated. 
-        vecMIsochromatHold = np.matmul(rotY,rotX)
+        vecMIsochromatHold = np.matmul(rotY,rotX) REDUNDANT BECAUSE ROT X IS IDENTITY MATRIX
+
+        """
+        rotY = np.array([[np.cos(thetaZ), -np.sin(thetaZ), 0],\
+                            [np.sin(thetaZ), np.cos(thetaZ), 0],\
+                            [0, 0, 1]])
+       
             
         # Updating the magnetization vector matricies
         #For tissue
-        self.vecMArrayTissue = np.matmul(vecMIsochromatHold, self.vecMArrayTissue)
+        #self.vecMArrayTissue = np.matmul(vecMIsochromatHold, self.vecMArrayTissue)
+        self.vecMArrayTissue = np.einsum("...ij,...j", rotY, self.vecMArrayTissue[..., 0])[..., None]
         #For blood 
-        self.vecMArrayBlood = np.matmul(vecMIsochromatHold,self.vecMArrayBlood)
+        #self.vecMArrayBlood = np.matmul(vecMIsochromatHold,self.vecMArrayBlood)
+        self.vecMArrayBlood = np.einsum("...ij,...j", rotY, self.vecMArrayBlood[..., 0])[..., None]
 
         return None
     
@@ -455,16 +471,17 @@ class DictionaryGeneratorFast():
         gradientMatrix += self.gradientY*self.positionArrayY
 
         # Gyromagnetic ratio for proton 42.6 MHz/T
-        omegaArray = np.repeat(np.expand_dims((42.6)*gradientMatrix, axis=2), self.noOfIsochromatsZ, axis=2)
+        omegaArray = np.repeat(np.expand_dims((42.6)*gradientMatrix, axis=2), self.noOfIsochromatsZ, axis=2) * self.deltaT
 
         #for the precessions generate an array storing the 3x3 rotation matrix 
         #for each isochromat
         precession = np.zeros([np.size(self.positionArrayX,0), np.size(self.positionArrayY,1),self.noOfIsochromatsZ, 3,3])
         precession[:,:,:,2,2] = 1
-
+        
+        
         # compute the trigonometric functions for the rotation matrices
-        cos_omega_deltaT = np.cos(omegaArray*self.deltaT)
-        sin_omega_deltaT = np.sin(omegaArray*self.deltaT)
+        cos_omega_deltaT = np.cos(omegaArray)
+        sin_omega_deltaT = np.sin(omegaArray)
         precession[:,:,:,0,0] = cos_omega_deltaT
         precession[:,:,:,0,1] = -sin_omega_deltaT
         precession[:,:,:,1,0] = sin_omega_deltaT
@@ -523,8 +540,16 @@ class DictionaryGeneratorFast():
 
         #Calculate the rotation matrices with different spatial matrices for each isochromat
         #in the array
-        precession = self.rotation_calculations()
 
+        precession = self.rotation_calculations()
+        """
+        lp = LineProfiler()
+        lp.add_function(self.rotation_calculations)
+        lp_wrapper = lp(self.rotation_calculations)
+        precession = lp_wrapper()
+        lp.dump_stats("profile_results.txt")
+        lp.print_stats()
+        """
         
         #Transpose to correct shape
         precession = precession.transpose(1,0,2,4,3)
@@ -735,7 +760,7 @@ class DictionaryGeneratorFast():
             """
 
 
-            totalTime = self.applied_precession(firstGradientDuration, totalTime)
+            #totalTime = self.applied_precession(firstGradientDuration, totalTime)
             
             #Apply second gradient lobe (traversing k-space)       
             self.gradientX = magnitudeOfGradient

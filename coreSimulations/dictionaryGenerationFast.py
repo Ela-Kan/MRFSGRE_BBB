@@ -226,9 +226,9 @@ def simulationFunction(paramArray):
             parameters[9], parameters[10], parameters[3]/10, parameters[2],
             parameters[4]/100,invSwitch, sliceProfileSwitch, samples, parameters[11], parameters[12])
     
-    profile = True # Set to True to profile the function to test for bottle necks (default is False)
+    profile = False # Set to True to profile the function to test for bottle necks (default is False)
 
-    if profile == False:
+    if profile == True:
         # Create a Profile object
         pr = cProfile.Profile()
         # Enable profiling
@@ -248,7 +248,7 @@ def simulationFunction(paramArray):
         print(s.getvalue())
 
     else:
-        """
+        
         # Run the dictionary generation
         lp = LineProfiler()
         lp.add_function(dictionaryGenerator.MRFSGRE)
@@ -258,6 +258,7 @@ def simulationFunction(paramArray):
         lp.print_stats()
         """
         dictionaryGenerator.MRFSGRE()
+        """
     # Return the result
     return None
 
