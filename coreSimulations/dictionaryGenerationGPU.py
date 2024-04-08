@@ -271,7 +271,8 @@ if __name__ == '__main__':
     import multiprocessing as mp
 
     #Check if GPU is available (for mac) and set device if it is available, else use CPU
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    #device = "mps" if torch.backends.mps.is_available() else "cpu"
+    device = "cpu"
     if device == "mps":
         print("Using GPU")
     elif device == "cpu":
@@ -279,7 +280,7 @@ if __name__ == '__main__':
 
     print('Beginning dictionary generation...')
 
-    """
+
     #For multiprocessing use the number of available cpus  
     #Currently set to perform differently on my Mac ('Darwin') system vs the cluster
     if platform.system() == "Darwin":
@@ -289,14 +290,14 @@ if __name__ == '__main__':
         #If on cluster only use a few 
         pool = mp.Pool(8)
 
-    """
+
     #Start timer
     t0 = time.time()
 
     #Generate the parameters
     params = parameterGeneration()
 
-    """
+
     #Run main function in parallel 
     #Current laptop (2021 M1 Macbook Pro) will have 8 CPUs available
     try:
@@ -306,11 +307,13 @@ if __name__ == '__main__':
         pool.terminate()
         pool.join()
         pool.close()
-s
+
     """
 
     for param in params:
         simulationFunction(param)
+
+    """
      
     #Stop timer and print                                                    
     t1 = time.time()

@@ -57,6 +57,8 @@ def rfpulse(vecMArrayTissue, vecMArrayBlood, loop, faArray,noOfIsochromatsZ, sli
     thetaX = ((fa/360)*2*np.pi)  
     
     rotX = np.zeros([len(thetaX),3,3])
+
+    """ NOTE: rotY is redundant because it is an identity matrix
     rotY = np.zeros([len(thetaX),3,3])
     #rotation (pulse) flips spins from aligned with the z-axis to
     #aligned with the x-axis
@@ -69,12 +71,18 @@ def rfpulse(vecMArrayTissue, vecMArrayBlood, loop, faArray,noOfIsochromatsZ, sli
     #Combined rotation (in this case same as rotX)
     vecMRotation = np.matmul(rotY,rotX) 
 
-    print(vecMRotation.shape)
+    """
+
+    for theta in range(len(thetaX)):
+        rotX[theta,:,:] = np.array([[1, 0, 0], [0, np.cos(thetaX[theta]), np.sin(thetaX[theta])], \
+                    [0, -np.sin(thetaX[theta]), np.cos(thetaX[theta])]])
+
+
     # Updating the magnetization vector matricies
     #For tissue
-    vecMArrayTissue = np.matmul(vecMRotation,vecMArrayTissue)
+    vecMArrayTissue = np.matmul(rotX,vecMArrayTissue)
     #For blood 
-    vecMArrayBlood = np.matmul(vecMRotation,vecMArrayBlood)
+    vecMArrayBlood = np.matmul(rotX,vecMArrayBlood)
 
     return vecMArrayTissue, vecMArrayBlood
 

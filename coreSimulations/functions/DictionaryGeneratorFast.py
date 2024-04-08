@@ -16,7 +16,7 @@ class DictionaryGeneratorFast():
     # Initialise the class
     def __init__(self, t1Array, t2Array, t2StarArray, noOfIsochromatsX,
                 noOfIsochromatsY, noOfIsochromatsZ, noOfRepetitions, noise, perc, res,
-                multi, inv, sliceProfileSwitch, samples, dictionaryId, instance):
+                multi, inv, sliceProfileSwitch, samples, dictionaryId, sequence, instance):
         """
         Parameters:
         -----------
@@ -50,6 +50,8 @@ class DictionaryGeneratorFast():
             Number of noise samples generated (set to one for dictionary generation)
         dictionaryId : str
             Dictionary ID
+        sequence : str
+            MRF sequence to use
         instance : int
             Instance number for multiple instances of the same code to run
         
@@ -70,7 +72,9 @@ class DictionaryGeneratorFast():
         self.inv = inv
         self.samples = samples
         self.dictionaryId = dictionaryId
+        self.sequence = sequence
         self.instance = instance
+        
 
     
         # PARAMETER DECLARATION
@@ -142,6 +146,8 @@ class DictionaryGeneratorFast():
         
         ### Open noise sample array
         self.noiseArray = np.load('./functions/holdArrays/noiseSamples.npy')
+
+
         
         ### Empty signal array to store all magnitization at all time points 
         self.signal = np.zeros([noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3, noOfRepetitions])
@@ -158,6 +164,8 @@ class DictionaryGeneratorFast():
                 self.signalDivide[r] = (sum(self.trRound[:r])+self.TE+self.pulseDuration)/self.deltaT
             else: 
                 self.signalDivide[r] = (sum(self.trRound[:r])+self.TE+self.pulseDuration)/self.deltaT 
+
+        
         
         return None 
 
@@ -287,6 +295,7 @@ class DictionaryGeneratorFast():
             #For the blood compartment
             #Set the relavent T1 and T2*
             t1 = self.t1Array[1]
+            t2Star = self.t2StarArray[1]
 
             #Set a hold array
             vecMIsochromat = self.vecMArrayBlood
@@ -361,6 +370,8 @@ class DictionaryGeneratorFast():
 
         """ 
 
+        """
+
         #rotation (pulse) flips spins from aligned with the z-axis to
         #aligned with the x-axis
         #Rotates around the x axis  
@@ -370,7 +381,12 @@ class DictionaryGeneratorFast():
             rotX[theta,:,:] = np.array([[1, 0, 0], [0, cos_thetaX, sin_thetaX], \
                                         [0, -sin_thetaX, cos_thetaX]])
             
-  
+        """
+        sin_thetaX,  cos_thetaX = nbh.sincos(thetaX)
+        rotX[:, 1, 1] = cos_thetaX
+        rotX[:, 1, 2] = sin_thetaX
+        rotX[:, 2, 1] = -sin_thetaX
+        rotX[:, 2, 2] = cos_thetaX      
 
         # Updating the magnetization vector matricies
         #For tissue
@@ -480,8 +496,9 @@ class DictionaryGeneratorFast():
         
         
         # compute the trigonometric functions for the rotation matrices
-        cos_omega_deltaT = np.cos(omegaArray)
-        sin_omega_deltaT = np.sin(omegaArray)
+        #cos_omega_deltaT = np.cos(omegaArray)
+        #sin_omega_deltaT = np.sin(omegaArray)
+        sin_omega_deltaT, cos_omega_deltaT = nbh.sincos(omegaArray)
         precession[:,:,:,0,0] = cos_omega_deltaT
         precession[:,:,:,0,1] = -sin_omega_deltaT
         precession[:,:,:,1,0] = sin_omega_deltaT
@@ -489,7 +506,7 @@ class DictionaryGeneratorFast():
 
         return precession
     
-    def applied_precession(self, gradientDuration, totalTime):
+    def applied_precession(self, gradientDuration, totalTime, signal_flag = True):
         """
         Calculation of the precession of isochormats during the application of gradients
         for a two compartment model. Relaxation is considered.
@@ -524,6 +541,8 @@ class DictionaryGeneratorFast():
             Total time passed
         signalDivide : numpy array, shape (noOfRepetitions,)
             Array where the echo peaks occur (echo peak position)
+        signal_flag : bool
+            Flag to indicate whether to store the signal or not
         
         Returns:
         --------
@@ -542,6 +561,7 @@ class DictionaryGeneratorFast():
         #in the array
 
         precession = self.rotation_calculations()
+        
         """
         lp = LineProfiler()
         lp.add_function(self.rotation_calculations)
@@ -614,7 +634,7 @@ class DictionaryGeneratorFast():
 
                 #If the total time that has passed corresponds to the time at which
                 # there is an echo peak:
-                if int(totalTime/self.deltaT) in self.signalDivide: 
+                if int(totalTime/self.deltaT) in self.signalDivide and signal_flag == True: 
                     #Get the index of the peak (what number peak is it?)
                     signalDivide = list(self.signalDivide)
                     ind = signalDivide.index(int(totalTime/self.deltaT))
@@ -649,7 +669,7 @@ class DictionaryGeneratorFast():
     
         """Gradient parameters"""
         # Maximum gradient height
-        magnitudeOfGradient  = -6e-3 #UNIT: T/m
+        magnitudeOfGradient  = -20e-3 #UNIT: T/m
 
         ### Set the duration of the gradients applied to have the echo peak occur at TE
         firstGradientDuration = self.TE/2
@@ -688,6 +708,14 @@ class DictionaryGeneratorFast():
             # Allow time for inversion recovery to null CSF
             #variable timeChuck to hold the array we dont want
             timeChuck = self.longTR(int(tNull), totalTime)
+
+         
+            # Apply preparation gradient
+            self.gradientX = -magnitudeOfGradient
+            self.gradientY = -magnitudeOfGradient
+
+            timeChuck = self.applied_precession(firstGradientDuration, totalTime, signal_flag = False)
+            
             
         '''
             MAIN LOOP
@@ -697,7 +725,7 @@ class DictionaryGeneratorFast():
 
         ### Loop over each TR repetitions
         for loop in range(self.noOfRepetitions):
-            
+            """
             '''
             WATER EXCHANGE
             '''  
@@ -734,60 +762,89 @@ class DictionaryGeneratorFast():
             reset = (reset < 0)
             reset = reset*1
             timeArray = timeArray * reset 
-                                
-            ###    RF PULSE
-            #Application of RF pulse modifying the vecM arrays
-            self.rfpulse(loop)
-            
-            ### RF SPOILING 
-            #Application of the rf spoiling modifying the vecM arrays
-            self.rf_spoil(loop)
-            
-            #Apply first gradient lobe (to the edge of k-space)
-            self.gradientX = -magnitudeOfGradient
-            self.gradientY = magnitudeOfGradient  #+ 2*(1/noOfRepetitions)*loop*magnitudeOfGradient
-        
-            ## FIRST SHORT GRADIENT
-            #Precession occuring during gradient application 
-            #Accounts for relaxation and applies precession to the vecM
+
             """
-            lp = LineProfiler()
-            lp.add_function(self.applied_precession)
-            lp_wrapper = lp(self.applied_precession)
-            totalTime = lp_wrapper(firstGradientDuration, totalTime)
-            lp.dump_stats("profile_results.txt")
-            lp.print_stats()
-            """
+            if self.sequence == 'SPGRE':                              
+                ###    RF PULSE
+                #Application of RF pulse modifying the vecM arrays
+                self.rfpulse(loop)
+                
+                ### RF SPOILING 
+                #Application of the rf spoiling modifying the vecM arrays
+                self.rf_spoil(loop)
+                
+                #Apply first gradient lobe (to the edge of k-space)
+                self.gradientX = -magnitudeOfGradient
+                self.gradientY = magnitudeOfGradient  #+ 2*(1/noOfRepetitions)*loop*magnitudeOfGradient
+            
+                ## FIRST SHORT GRADIENT
+                #Precession occuring during gradient application 
+                #Accounts for relaxation and applies precession to the vecM
+                totalTime = self.applied_precession(firstGradientDuration, totalTime)
+                
+                #Apply second gradient lobe (traversing k-space)       
+                self.gradientX = magnitudeOfGradient
+                self.gradientY = -magnitudeOfGradient
+            
+                
+                ## SECOND GRADIENT - DOUBLE LENGTH
+                #Precession occuring during gradient application 
+                #Accounts for relaxation and applies precession to the vecM
+                totalTime = self.applied_precession(secondGradientDuration, totalTime)
+                
+                
+                # Calculate time passed
+                passed = (self.pulseDuration + firstGradientDuration + secondGradientDuration)
+                
+                #Turn off gradients for remaining TR to play out
+                self.gradientX = 0
+                self.gradientY = 0
+            
+                # Allow remaining TR time
+                totalTime = self.longTR((self.trRound[loop]-passed), totalTime)
+            
+            elif self.sequence == 'FISP':
+                
+                # Fist, set the T2_star array to equal the T2_array because T2_star isn't
+                # relevant here, and all of the implementation on code relies on T2_star
+                #self.t2StarArray = self.t2Array
+
+                """
+                # First 'prep' gradient applied
+                self.gradientX = -magnitudeOfGradient # the gradient needs to be positive, so make the variable negative
+                self.gradientY = -magnitudeOfGradient
+                # Precession during gradient
+                totalTime = self.applied_precession(firstGradientDuration, totalTime)
+                """
+
+                # Apply the RF pulse for the current FA
+                self.rfpulse(loop)
+
+                # Apply first post-pulse gradient
+                self.gradientX = magnitudeOfGradient
+                self.gradientY = -magnitudeOfGradient
+                # Precession during gradient
+                totalTime = self.applied_precession(firstGradientDuration, totalTime)
+
+                # Apply gradient for twice as long
+                self.gradientX = -magnitudeOfGradient
+                self.gradientY = magnitudeOfGradient
+                # Precession during gradient
+                totalTime = self.applied_precession(secondGradientDuration, totalTime)
+
+                # Calculate time passed
+                passed = (self.pulseDuration + firstGradientDuration + secondGradientDuration)
+                
+                #Continue 'spoiler' gradients for remaining TR to play out and no signal is recorded
+                remainingTime = self.trRound[loop]-passed
+
+                totalTime = self.applied_precession(remainingTime, totalTime, signal_flag = False)
+                  
 
 
-            #totalTime = self.applied_precession(firstGradientDuration, totalTime)
-            
-            #Apply second gradient lobe (traversing k-space)       
-            self.gradientX = magnitudeOfGradient
-            self.gradientY = -magnitudeOfGradient
-        
-            
-            ## SECOND GRADIENT - DOUBLE LENGTH
-            #Precession occuring during gradient application 
-            #Accounts for relaxation and applies precession to the vecM
-            totalTime = self.applied_precession(secondGradientDuration, totalTime)
-            
-            
-            # Calculate time passed
-            passed = (self.pulseDuration + firstGradientDuration + secondGradientDuration)
-            
-            #Turn off gradients for remaining TR to play out
-            self.gradientX = 0
-            self.gradientY = 0
-        
-            # Allow remaining TR time
-            totalTime = self.longTR((self.trRound[loop]-passed), totalTime)
-            
         '''
         ADD NOISE 
         '''
-
-        
         #Randomly select noise samples from existing noise array 
         noiseSize = np.shape(self.noiseArray)
         noiseSamples = np.random.choice(int(noiseSize[0]),[self.noOfRepetitions*self.samples])
@@ -795,7 +852,7 @@ class DictionaryGeneratorFast():
 
         #Transpose to fix shape
         addedNoise = np.transpose(addedNoise, (2,0,1))
-        
+
         #Expand arrays to account for noise levels and samples
         vecPeaks = np.expand_dims(self.signal,axis=5)
         vecPeaks = np.tile(vecPeaks, [self.noise])

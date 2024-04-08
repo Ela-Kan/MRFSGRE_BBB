@@ -42,7 +42,7 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
  
     """--------------------PARAMETER DECLERATION------------------------------"""
     ### This is defined as a unit vector along the z-axis
-    vecM = np.float64([[0],[0],[1]])
+    vecM = np.float32([[0],[0],[1]]) #was float64
     
     ### The modifiable variables are set as followed:
     # Maximum gradient height
@@ -200,9 +200,8 @@ def MRFSGRE(t1Array, t2Array, t2StarArray, noOfIsochromatsX,
         randsZ = np.random.randint(0, np.size(vecMArrayTissue,2), int(np.size(np.argwhere(exch == 1),0)))
         # Swap
         for change in range(int(np.size(np.argwhere(exch == 1),0))):
-            hold = vecMArrayBlood[indBlood[change,0],indBlood[change,1],indBlood[change,2],:]
-            vecMArrayBlood[indBlood[change,0],indBlood[change,1],indBlood[change,2]] = vecMArrayTissue[randsX[change],randsY[change],randsZ[change],:]
-            vecMArrayTissue[randsX[change],randsY[change],randsZ[change],:] = hold 
+            vecMArrayBlood[indBlood[change,0],indBlood[change,1],indBlood[change,2],:], vecMArrayTissue[randsX[change],randsY[change],randsZ[change],:] = \
+                vecMArrayTissue[randsX[change],randsY[change],randsZ[change],:], vecMArrayBlood[indBlood[change,0],indBlood[change,1],indBlood[change,2],:]
             
         # reset time array
         reset = cum - rands

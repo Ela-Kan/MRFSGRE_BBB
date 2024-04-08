@@ -27,6 +27,8 @@ import io
 import cProfile
 import pstats
 from line_profiler import LineProfiler
+from perlin_noise import PerlinNoise
+import random
 
 #go up a folder
 #os.chdir("..")
@@ -60,14 +62,14 @@ def parameterGeneration():
     noOfIsochromatsY = 1
     noOfIsochromatsZ = 10
     # TR train length
-    noOfRepetitions = 2000
+    noOfRepetitions = 1000 #2000
     
     ## TISSUE PROPERTIES
     #Assign initial arrays for the tissue values 
     #Format:    array = [tissue value, blood value] 
     # Units: ms
     #t1Array = np.array([1300,1800])
-    t2Array = np.array([90,63])
+    t2Array = np.array([85,85])
     t2StarArray = np.array([50,21])
      
      ## FIX ME
@@ -76,13 +78,13 @@ def parameterGeneration():
     
     # Specify the ranges and step sizes of the dictionary dimensions
     # intravascular water residence time (res) UNIT: ms
-    resArray = range(200,1700,107) #range(200,1700,107) #range(200,1700,70) 
+    resArray = [200]#range(200,1700,107) #range(200,1700,107) #range(200,1700,70) 
     # percentage blood volume (perc) UNIT: %
-    percArray = range(10,110,7) #REMEMBER IT WILL BE DIVIDED BY 10 
+    percArray = [10]#range(10,110,7) #REMEMBER IT WILL BE DIVIDED BY 10 
     #T1 of tissue compartment (t1t) UNIT: ms
-    t1tArray = [1300] #range(700,1700,69) 
+    t1tArray = [700] #range(700,1700,69) 
     #T1 of blood compartment (t1b) UNIT: ms
-    t1bArray = [1700] #range(1540,1940,27) 
+    t1bArray = [700] #range(1540,1940,27) 
     # multiplication factor for the B1 value (multi)
     multiArray = [100] #range(70, 120, 3) 
 
@@ -95,7 +97,7 @@ def parameterGeneration():
     #In folder will show as "DictionaryXXX" 
     #This folder needs to already exist or code will not run 
 
-    dictionaryId  = 'Fast'
+    dictionaryId  = 'FISP'
 
     ## SHAPE OF VARIATIONS
     
@@ -109,12 +111,12 @@ def parameterGeneration():
     #            width of half peak = pi*b 
     #       gaps: same as sinusoidal but with user specifed sections of zero FA 
     #             without editing gaps will be after every 250 FAs (can be edited below)
-    caseFA = 'sin' #'random'  #'gaps'
+    caseFA = 'FISP' #'sin' #'random'  #'gaps'
     a = 13; b = 40
     # For repetition time [ms]: 
     #       random: random variation in FA between two values: d and e
     #       sin: sinusoidal variation with min TR = d, max TR = 2*e+d, period = 2*pi*c
-    caseTR = 'sin' # #'sin' #'random' 
+    caseTR = 'perlin' # #'sin' #'random' 
     c =181; d = 100; e = 45
     
     #If you want gaps in the flip angles, specify width here 
@@ -138,6 +140,27 @@ def parameterGeneration():
         # so change the first flip angle to be a little higher
         if inv == True:
             faArray[0] = 180
+        
+
+    if caseFA == 'FISP':
+        # From https://onlinelibrary.wiley.com/doi/epdf/10.1002/mrm.25559
+        Nrf = 200
+        cycles = noOfRepetitions/Nrf
+        faArray = []
+        #ßmaxFA = random.sample(range(5,90),int(cycles)) # random sample of flip angles
+        maxFA = [35,43,70,46,27] # values from the paper
+        for i in range(int(cycles)):
+            # Current random flip angle
+            maxFA_i = maxFA[i]
+            # Iterate through the segment
+            for j in range(Nrf):
+                # Calculate the flip angle
+                flipAngle = np.sin(j*np.pi/Nrf)*maxFA_i
+                # Append the flip angle to the array
+                faArray.append(flipAngle)
+        if inv == True:
+            faArray[0] = 180
+
     elif caseFA == 'gaps':
         #As above: 
         xRange = np.array(range(noOfRepetitions))
@@ -168,6 +191,20 @@ def parameterGeneration():
     elif caseTR == 'random':
         #Generate a uniform random array between for the number of repetitions
         trArray = np.random.uniform(d,e,[noOfRepetitions])
+   
+    elif caseTR =='perlin':
+        """
+        perlin = PerlinNoise(octaves=3, seed=8)
+        trArray = np.array([perlin(i/noOfRepetitions) for i in range(noOfRepetitions)])
+        # scale TR to our range (FIX SO THIS ISN'T HARDCODED)
+        min_TR = 11.5
+        max_TR = 14.5
+        trArray = (trArray-min(trArray))/(max(trArray)-min(trArray))*(max_TR-min_TR)+min_TR
+        """
+        # https://onlinelibrary.wiley.com/doi/10.1002/mrm.25559 Perlin Noise
+        trArray = np.load('./functions/holdArrays/FISP_TR_Jiang.npy') 
+
+
     #Save array for calling in the main function later
     np.save('./functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
 
@@ -224,7 +261,7 @@ def simulationFunction(paramArray):
     dictionaryGenerator =  DictionaryGeneratorFast(t1Array, parameters[5], parameters[6],
             parameters[7], parameters[8], parameters[13],
             parameters[9], parameters[10], parameters[3]/10, parameters[2],
-            parameters[4]/100,invSwitch, sliceProfileSwitch, samples, parameters[11], parameters[12])
+            parameters[4]/100,invSwitch, sliceProfileSwitch, samples, parameters[11], 'FISP', parameters[12])
     
     profile = False # Set to True to profile the function to test for bottle necks (default is False)
 
@@ -248,7 +285,7 @@ def simulationFunction(paramArray):
         print(s.getvalue())
 
     else:
-        
+        """
         # Run the dictionary generation
         lp = LineProfiler()
         lp.add_function(dictionaryGenerator.MRFSGRE)
@@ -258,7 +295,6 @@ def simulationFunction(paramArray):
         lp.print_stats()
         """
         dictionaryGenerator.MRFSGRE()
-        """
     # Return the result
     return None
 

@@ -56,7 +56,8 @@ class GPUDictionaryGenerator():
 
 
         #Check if GPU is available (for mac) and set device if it is available, else use CPU
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        #device = "mps" if torch.backends.mps.is_available() else "cpu"
+        device = "cpu"
         if device == "cpu":
             warnings.warn("GPU unavailable. Consider using dictionaryGeneration script instead.", RuntimeWarning)
         
@@ -198,7 +199,8 @@ class GPUDictionaryGenerator():
             Array of magnetization vectors for the blood compartment
         """
 
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        #device = "mps" if torch.backends.mps.is_available() else "cpu"
+        device = "cpu"
         
         #180 pulse for inversion
         #because the 180 pulse is rubbish multiply value by 0.7
@@ -337,7 +339,9 @@ class GPUDictionaryGenerator():
         
         """
 
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        #device = "mps" if torch.backends.mps.is_available() else "cpu"
+        device = "cpu"
+
         
         faInt = int(self.faArray[loop]*100)
         #Extract the flip angle of this loop (degrees)
@@ -411,7 +415,8 @@ class GPUDictionaryGenerator():
 
         """
 
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        #device = "mps" if torch.backends.mps.is_available() else "cpu"
+        device = "cpu"
 
         #Using the rf phase formula developed by Zur et al (1991)
         # calculate the phase change for this particular repetition
@@ -457,7 +462,7 @@ class GPUDictionaryGenerator():
             Number of isochromats in the z direction
         deltaT : int
             Time increment
-        
+        ß
         Returns:
         --------
         precession : numpy nd array, shape (noOfIsochromatsY, noOfIsochromatsX, noOfIsochromatsZ, [3, 3])
@@ -465,7 +470,8 @@ class GPUDictionaryGenerator():
         
         """
 
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        #device = "mps" if torch.backends.mps.is_available() else "cpu"
+        device = "cpu"
         
         #Find gradient field strength from both x and y gradients at each isochromat 
         # position
@@ -633,7 +639,8 @@ class GPUDictionaryGenerator():
             Noisy signal array (magnitude of magnetization at echo time for each noise level)
         """
 
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        #device = "mps" if torch.backends.mps.is_available() else "cpu"
+        device = "cpu"
     
         """Gradient parameters"""
         # Maximum gradient height

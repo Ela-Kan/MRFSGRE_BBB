@@ -22,10 +22,8 @@ import numpy as np
 import sys
 import os
 import platform
-import cProfile
-import pstats
-import io
-from line_profiler import LineProfiler
+import torch
+import warnings
 
 #go up a folder
 #os.chdir("..")
@@ -35,11 +33,19 @@ from line_profiler import LineProfiler
 #Definition of the function that calculates the parameters for each of the 
 # multiprocessing threads
 def parameterGeneration():
+    """
+    Generate the parameter combinations for the dictionary generation. 
+
+    Returns:
+    --------    
+    allParams : list of tuples
+        List of tuples containing the parameters for each dictionary entry
+    """
     
     # To allow for multiple instances of the same code to be run simulataneously 
     # an instance is specified to ensure FA and TR array files are called 
     # to the correct simulation
-    instance = 1
+    instance = 3
     
     ## ISOCHROMAT INFORMATION
     
@@ -86,7 +92,7 @@ def parameterGeneration():
     #In folder will show as "DictionaryXXX" 
     #This folder needs to already exist or code will not run 
 
-    dictionaryId  = 'Fast'
+    dictionaryId  = 'GPU'
 
     ## SHAPE OF VARIATIONS
     
@@ -183,9 +189,17 @@ def parameterGeneration():
 #Requires a single argument for parallelisation to work so previous function 
 #concatenated all parameters into one list of tuples
 def simulationFunction(paramArray):
+    """
+    Main function for the dictionary generation.
+
+    Parameters:
+    ----------- 
+    paramArray : list
+        List of parameters for one dictionary entry
+    """
     
-    sys.path.insert(0, "./functions/")
-    from blochSimulation import MRFSGRE
+    sys.path.insert(0, "./functions/GPUgeneration/")
+    from blochSimulationGPU import MRFSGRE
     
     #Is there an inversion pulse
     invSwitch = True
@@ -196,47 +210,16 @@ def simulationFunction(paramArray):
     samples = 1
     
     parameters = tuple(paramArray)
+
     t1Array = np.array([parameters[0],parameters[1]])
-    
-    profile_type = ''
-    if profile_type == 'cProfile':
-        pr = cProfile.Profile()
-        pr.enable()
-
-        #These parameters are: 
-        # t1Array, t2Array, t2StarArray, noOfIsochromatsX, noOfIsochromatsY, 
-        # noOfIsochromatsZ, noOfRepetitions, noise, perc, res, multi, inv, 
-        # sliceProfileSwitch, samples, dictionaryId, instance
-        MRFSGRE(t1Array, parameters[5], parameters[6],
-                parameters[7], parameters[8], parameters[13],
-                parameters[9], parameters[10], parameters[3]/10, parameters[2],
-                parameters[4]/100,invSwitch, sliceProfileSwitch, samples, parameters[11], parameters[12])
-        
-        # Disable profiling
-        pr.disable()
-        # Save the profile results
-        s = io.StringIO()
-        # Create a Stats object from the Profile object, and write the results to the StringIO object
-        ps = pstats.Stats(pr, stream=s).sort_stats('cumulative')
-        # Print the profiling results
-        ps.print_stats()
-        print(s.getvalue())
-
-    elif profile_type == 'line':
-        lp = LineProfiler()
-        lp.add_function(MRFSGRE)
-        wrapper = lp(MRFSGRE)
-        wrapper(t1Array, parameters[5], parameters[6],
-                    parameters[7], parameters[8], parameters[13],
-                    parameters[9], parameters[10], parameters[3]/10, parameters[2],
-                    parameters[4]/100,invSwitch, sliceProfileSwitch, samples, parameters[11], parameters[12])
-
-        lp.print_stats()
-    else:
-        MRFSGRE(t1Array, parameters[5], parameters[6],
-                parameters[7], parameters[8], parameters[13],
-                parameters[9], parameters[10], parameters[3]/10, parameters[2],
-                parameters[4]/100,invSwitch, sliceProfileSwitch, samples, parameters[11], parameters[12])
+    #These parameters are: 
+    # t1Array, t2Array, t2StarArray, noOfIsochromatsX, noOfIsochromatsY, 
+    # noOfIsochromatsZ, noOfRepetitions, noise, perc, res, multi, inv, 
+    # sliceProfileSwitch, samples, dictionaryId, instance
+    MRFSGRE(t1Array, parameters[5], parameters[6],
+            parameters[7], parameters[8], parameters[13],
+            parameters[9], parameters[10], parameters[3]/10, parameters[2],
+            parameters[4]/100,invSwitch, sliceProfileSwitch, samples, parameters[11], parameters[12])
     
 
 '''-------------------------MAIN DICTIONARY LOOPS---------------------------'''
@@ -253,17 +236,20 @@ if __name__ == '__main__':
     import itertools
     import multiprocessing as mp
 
+    #Check if GPU is available (for mac) and set device if it is available, else use CPU
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    if device == "mps":
+        print("Using GPU")
+    elif device == "cpu":
+        warnings.warn("GPU unavailable. Consider using dictionaryGeneration script instead.", RuntimeWarning)
+
     print('Beginning dictionary generation...')
 
-    #For multiprocessing use the number of available cpus  
+#For multiprocessing use the number of available cpus  
     #Currently set to perform differently on my Mac ('Darwin') system vs the cluster
     if platform.system() == "Darwin":
         #If on local computer can use all CPUs
         pool = mp.Pool(12)
-
-    if platform.system() == "Windows": # adding my Windows PC for testing
-         #If on local computer can use all CPUs
-        pool = mp.Pool(8)
     else:
         #If on cluster only use a few 
         pool = mp.Pool(8)
@@ -273,7 +259,7 @@ if __name__ == '__main__':
     params = parameterGeneration()
     
     #Run main function in parallel 
-
+    #Current laptop (2021 M1 Macbook Pro) will have 8 CPUs available
     try:
         pool.map(simulationFunction, params)
     finally:
@@ -286,3 +272,5 @@ if __name__ == '__main__':
     t1 = time.time()
     total = t1-t0
     print(total)   
+
+# TODO: test if class works

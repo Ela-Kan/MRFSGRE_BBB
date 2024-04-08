@@ -20,8 +20,11 @@ def invpulse(vecMArrayTissue, vecMArrayBlood, loop, noOfIsochromatsZ, multi):
     #because the 180 pulse is rubbish multiply value by 0.7
     #this is extremely crude - need to add either another parameter 
     # or manually code the IR pulse in the sequence code
-    thetaX = np.pi*multi*0.8*np.ones([noOfIsochromatsZ])
+    #thetaX = np.pi*multi*0.8*np.ones([noOfIsochromatsZ])
+
+    thetaX = np.pi*multi*0.8 # the thetaX is the same throughout
     
+    """
     rotX = np.zeros([len(thetaX),3,3])
     rotY = np.zeros([len(thetaX),3,3])
     #rotation (pulse) flips spins from aligned with the z-axis to
@@ -32,6 +35,13 @@ def invpulse(vecMArrayTissue, vecMArrayBlood, loop, noOfIsochromatsZ, multi):
                         [0, -np.sin(thetaX[theta]), np.cos(thetaX[theta])]])
         rotY[theta,:,:] = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
     vecMRotation = np.matmul(rotY,rotX) 
+    """
+    sin_thetaX = np.sin(thetaX)
+    cos_thetaX = np.cos(thetaX)
+    vecMRotation = np.array([[1, 0, 0], [0, np.cos(thetaX), np.sin(thetaX)], \
+                                        [0, -np.sin(thetaX), np.cos(thetaX)]])
+    
+    vecMRotation = np.tile(vecMRotation,(noOfIsochromatsZ,1,1))
 
     # Updating the magnetization vector matricies
     #For tissue
