@@ -383,10 +383,46 @@ class DictionaryGeneratorFast():
             
         """
         sin_thetaX,  cos_thetaX = nbh.sincos(thetaX)
+        rotX[:,0, 0] = 1
         rotX[:, 1, 1] = cos_thetaX
         rotX[:, 1, 2] = sin_thetaX
         rotX[:, 2, 1] = -sin_thetaX
         rotX[:, 2, 2] = cos_thetaX      
+		
+        # Find the remaining magnetisation magnitude and direction for the current TR
+        
+
+        """
+		if self.sequence == 'FISP': 
+            
+            #  Weigel at al, JMR 205(2010)276-285, Eq. 20.
+            
+            
+            rotX[:, 0, 0] = np.cos(thetaX/2)**2
+            rotX[:, 0, 1] = -np.sin(thetaX/2)**2
+            rotX[:, 0, 2] = np.sin(thetaX)
+            rotX[:, 1, 0] = -np.sin(thetaX/2)**2
+            rotX[:, 2, 0] = -0.5* np.sin(thetaX)
+            rotX[:, 1, 1] = np.cos(thetaX/2)**2
+            rotX[:, 1, 2] = np.sin(thetaX)
+            rotX[:, 2, 1] = -0.5*np.sin(thetaX)
+            rotX[:, 2, 2] = np.cos(thetaX)
+            
+            
+            phi = 2.61799 #-np.pi/20
+            rotX[:, 0, 0] = np.cos(thetaX/ 2) ** 2
+            rotX[:, 0, 1] = np.exp(2j * phi) * (np.sin(thetaX / 2)) ** 2
+            rotX[:, 0, 2] = -1j * np.exp(1j * phi) * np.sin(thetaX)
+            rotX[:, 1, 0] = np.exp(-2j * phi) * (np.sin(thetaX / 2)) ** 2
+            rotX[:, 2, 0] = np.cos(thetaX / 2) ** 2
+            rotX[:, 1, 1] = 1j * np.exp(-1j * phi) * np.sin(thetaX)
+            rotX[:, 1, 2] = -1j/2 * np.exp(-1j * phi) * np.sin(thetaX)
+            rotX[:, 2, 1] = 1j/2 * np.exp(1j * phi) * np.sin(thetaX)
+            rotX[:, 2, 2] = np.cos(thetaX)
+            
+
+		"""
+
 
         # Updating the magnetization vector matricies
         #For tissue
@@ -486,7 +522,7 @@ class DictionaryGeneratorFast():
         gradientMatrix = self.gradientX*self.positionArrayX 
         gradientMatrix += self.gradientY*self.positionArrayY
 
-        # Gyromagnetic ratio for proton 42.6 MHz/T
+         # Gyromagnetic ratio for proton 42.6 MHz/T
         omegaArray = np.repeat(np.expand_dims((42.6)*gradientMatrix, axis=2), self.noOfIsochromatsZ, axis=2) * self.deltaT
 
         #for the precessions generate an array storing the 3x3 rotation matrix 
@@ -669,7 +705,7 @@ class DictionaryGeneratorFast():
     
         """Gradient parameters"""
         # Maximum gradient height
-        magnitudeOfGradient  = -20e-3 #UNIT: T/m
+        magnitudeOfGradient  = -8e-3*np.pi #UNIT: T/m
 
         ### Set the duration of the gradients applied to have the echo peak occur at TE
         firstGradientDuration = self.TE/2
@@ -683,7 +719,7 @@ class DictionaryGeneratorFast():
         '''
         
         ### Include an inversion recovery pulse to null CSF :'0' - No, '1' - 'Yes'      
-        if self.inv == 1:
+        if self.inv == 1 and self.sequence =='SPGRE':
 
             # T1 of CSF set to 4500 ms from  Shin W, Gu H, Yang Y. 
             #Fast high-resolution T1 mapping using inversion-recovery Look–Locker
@@ -708,13 +744,6 @@ class DictionaryGeneratorFast():
             # Allow time for inversion recovery to null CSF
             #variable timeChuck to hold the array we dont want
             timeChuck = self.longTR(int(tNull), totalTime)
-
-         
-            # Apply preparation gradient
-            self.gradientX = -magnitudeOfGradient
-            self.gradientY = -magnitudeOfGradient
-
-            timeChuck = self.applied_precession(firstGradientDuration, totalTime, signal_flag = False)
             
             
         '''
@@ -807,7 +836,7 @@ class DictionaryGeneratorFast():
                 
                 # Fist, set the T2_star array to equal the T2_array because T2_star isn't
                 # relevant here, and all of the implementation on code relies on T2_star
-                #self.t2StarArray = self.t2Array
+                self.t2StarArray = self.t2Array
 
                 """
                 # First 'prep' gradient applied
@@ -816,7 +845,8 @@ class DictionaryGeneratorFast():
                 # Precession during gradient
                 totalTime = self.applied_precession(firstGradientDuration, totalTime)
                 """
-
+                
+                # From https://cds.ismrm.org/protected/18MProceedings/PDFfiles/images/1274/ISMRM2018-001274_Fig3.png (FISP)
                 # Apply the RF pulse for the current FA
                 self.rfpulse(loop)
 
@@ -832,14 +862,33 @@ class DictionaryGeneratorFast():
                 # Precession during gradient
                 totalTime = self.applied_precession(secondGradientDuration, totalTime)
 
-                # Calculate time passed
-                passed = (self.pulseDuration + firstGradientDuration + secondGradientDuration)
-                
-                #Continue 'spoiler' gradients for remaining TR to play out and no signal is recorded
-                remainingTime = self.trRound[loop]-passed
+                # Apply crusher gradient
+                self.gradientX = -magnitudeOfGradient
+                self.gradientY = magnitudeOfGradient
+                # Precession during gradient
+                totalTime = self.applied_precession(firstGradientDuration, totalTime)
 
-                totalTime = self.applied_precession(remainingTime, totalTime, signal_flag = False)
-                  
+                # Calculate time passed
+                passed = (self.pulseDuration + firstGradientDuration*2 + secondGradientDuration)
+                
+                # Allow remaining TR time
+                totalTime = self.longTR((self.trRound[loop]-passed), totalTime)
+
+                """
+                    if HYDRA == True:
+                    # The Song (HYDRA2019) FISP
+                
+                        # FID after pulse for TE and then sample signal
+                        totalTime = self.longTR(self.TE, totalTime)
+
+                        # Allow relaxation and unbalanced 'spoiler gradient' 
+                        passed = self.TE + self.pulseDuration
+                        spoilerTime = self.TE/2
+                        totalTime = self.longTR(self.trRound[loop]-passed-spoilerTime, totalTime)
+                        self.gradientX = -magnitudeOfGradient
+                        self.gradientY = magnitudeOfGradient
+                        totalTime = self.applied_precession(spoilerTime, totalTime, signal_flag=False)
+                """
 
 
         '''
@@ -858,8 +907,13 @@ class DictionaryGeneratorFast():
         vecPeaks = np.tile(vecPeaks, [self.noise])
         
         #signal save file name
-        signalName = 'echo_' + str(self.t1Array[0]) + '_' + str(self.t1Array[1]) + '_'  \
-        + str(self.res) + '_' + str(self.perc) + '_' + str(self.multi) + '_'
+        if self.sequence == 'SPGRE':
+            signalName = 'echo_' + str(self.t1Array[0]) + '_' + str(self.t1Array[1]) + '_'  \
+            + str(self.res) + '_' + str(self.perc) + '_' + str(self.multi) + '_'
+        if self.sequence == 'FISP':
+            signalName = 'echo_' + str(self.t1Array[0]) + '_' + str(self.t1Array[1]) + '_'  + str(self.t2Array[0]) + '_'  + str(self.t2Array[1]) + '_'\
+            + str(self.res) + '_' + str(self.perc) + '_' + str(self.multi) + '_'
+
         
         #Open noisy signal array
         signalNoisy = np.zeros([self.noOfRepetitions,self.noise])
@@ -894,6 +948,7 @@ class DictionaryGeneratorFast():
                 
             #Save signal         
             name = '../dictionaries/Dictionary' + self.dictionaryId +'/' + signalName + str(samp + 1)
+            #signalNoisy = signalNoisy/(self.noOfIsochromatsX*self.noOfIsochromatsY*self.noOfIsochromatsZ) # max magnetisation needs to equal 1, right now each
             np.save(name, signalNoisy)
 
 

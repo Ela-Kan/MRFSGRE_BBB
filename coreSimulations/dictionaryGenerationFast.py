@@ -69,7 +69,7 @@ def parameterGeneration():
     #Format:    array = [tissue value, blood value] 
     # Units: ms
     #t1Array = np.array([1300,1800])
-    t2Array = np.array([85,85])
+    t2Array = np.array([100,100])
     t2StarArray = np.array([50,21])
      
      ## FIX ME
@@ -80,13 +80,13 @@ def parameterGeneration():
     # intravascular water residence time (res) UNIT: ms
     resArray = [200]#range(200,1700,107) #range(200,1700,107) #range(200,1700,70) 
     # percentage blood volume (perc) UNIT: %
-    percArray = [10]#range(10,110,7) #REMEMBER IT WILL BE DIVIDED BY 10 
+    percArray = [500]#range(10,110,7) #REMEMBER IT WILL BE DIVIDED BY 10 
     #T1 of tissue compartment (t1t) UNIT: ms
-    t1tArray = [700] #range(700,1700,69) 
+    t1tArray = [700,1700] #range(700,1700,69) 
     #T1 of blood compartment (t1b) UNIT: ms
-    t1bArray = [700] #range(1540,1940,27) 
+    t1bArray = [1540,1940] #range(1540,1940,27) 
     # multiplication factor for the B1 value (multi)
-    multiArray = [100] #range(70, 120, 3) 
+    multiArray = [118] #range(70, 120, 3) #100
 
     ## NOISE INFORMATION 
     # number of noise levels
@@ -144,20 +144,30 @@ def parameterGeneration():
 
     if caseFA == 'FISP':
         # From https://onlinelibrary.wiley.com/doi/epdf/10.1002/mrm.25559
-        Nrf = 200
-        cycles = noOfRepetitions/Nrf
+        # Set the number of points
+        Nrf = 1000
+        # Initialize an empty list to hold the flip angles
         faArray = []
-        #ßmaxFA = random.sample(range(5,90),int(cycles)) # random sample of flip angles
-        maxFA = [35,43,70,46,27] # values from the paper
-        for i in range(int(cycles)):
-            # Current random flip angle
-            maxFA_i = maxFA[i]
-            # Iterate through the segment
-            for j in range(Nrf):
-                # Calculate the flip angle
-                flipAngle = np.sin(j*np.pi/Nrf)*maxFA_i
-                # Append the flip angle to the array
-                faArray.append(flipAngle)
+        # Calculate the number of full cycles
+        cycles = Nrf // 200
+        # Select a maximum flip angle from the list in paper
+        FAs = [35,43,70,46,27]
+        # Generate the flip angles
+        for i in range(cycles):
+            # Select a random maximum flip angle between 5 and 90 degrees
+            # Select a maximum flip angle from the list
+            FAmax = FAs[i]
+            # Generate the flip angles for this cycle
+            for n in range(1, 201):
+                FA = np.sin(n * np.pi / 200) * FAmax
+                faArray.append(FA)
+            # Add ten zero-degree flip angles between cycles
+            np.array(faArray.extend([0] * 10))
+
+        # If Nrf is not a multiple of 210 (200 + 10), trim the array to the correct size
+        if len(faArray) > Nrf:
+            faArray = faArray[:Nrf]
+
         if inv == True:
             faArray[0] = 180
 
@@ -203,6 +213,8 @@ def parameterGeneration():
         """
         # https://onlinelibrary.wiley.com/doi/10.1002/mrm.25559 Perlin Noise
         trArray = np.load('./functions/holdArrays/FISP_TR_Jiang.npy') 
+        if inv == True:
+            trArray[0] = 0
 
 
     #Save array for calling in the main function later
@@ -346,4 +358,3 @@ if __name__ == '__main__':
     t1 = time.time()
     total = t1-t0
     print(total)   
-
