@@ -16,7 +16,7 @@ class DictionaryGeneratorFast():
     # Initialise the class
     def __init__(self, t1Array, t2Array, t2StarArray, noOfIsochromatsX,
                 noOfIsochromatsY, noOfIsochromatsZ, noOfRepetitions, noise, perc, res,
-                multi, inv, sliceProfileSwitch, samples, dictionaryId, sequence, instance):
+                multi, inv, CSFnullswitch, sliceProfileSwitch, samples, dictionaryId, sequence, instance):
         """
         Parameters:
         -----------
@@ -44,6 +44,8 @@ class DictionaryGeneratorFast():
             Multiplication factor for the B1 value
         inv : bool
             Inversion pulse switch
+        CSFnullswitch : bool
+            CSF nulling switch
         sliceProfileSwitch : bool
             Slice profile switch
         samples : int
@@ -70,10 +72,12 @@ class DictionaryGeneratorFast():
         self.res = res
         self.multi = multi
         self.inv = inv
+        self.CSF_null = CSFnullswitch
         self.samples = samples
         self.dictionaryId = dictionaryId
         self.sequence = sequence
         self.instance = instance
+  
         
 
     
@@ -92,7 +96,7 @@ class DictionaryGeneratorFast():
 
         
         ### Time increment
-        self.deltaT = 1 #ms
+        self.deltaT = 1 #1ms
 
         #Initially gradient is 0 (while pulse is on)
         self.gradientX = 0 #T/m
@@ -117,9 +121,15 @@ class DictionaryGeneratorFast():
             profileSamples = np.arange(startPoint, endPoint, stepSize, dtype=int) #np.round(np.linspace(0+27, np.size(sliceProfileArray,1)-1-27, noOfIsochromatsZ),0)
             #profileSamples = profileSamples.astype(int)
             self.sliceProfile = sliceProfileArray[:,profileSamples]
+
+    
         else: 
             #If you want flat slice profile then this (i.e. homogenous excitation profile across the slice thickness)
             self.sliceProfile = np.tile(np.expand_dims(np.round(np.linspace(1,90,90*100),0), axis=1),noOfIsochromatsZ)   
+           
+            
+
+        
 
         """---------------------------OPEN ARRAYS-----------------------------"""
         ### This is defined as a unit vector along the z-axis
@@ -201,38 +211,38 @@ class DictionaryGeneratorFast():
         # or manually code the IR pulse in the sequence code
         #thetaX = np.pi*self.multi*0.8*np.ones([self.noOfIsochromatsZ])
         
-        thetaX = np.pi*self.multi*0.8
-        
-        """
-        rotX = np.zeros([len(thetaX),3,3])
+        if self.sequence == 'FISP':
+            thetaX = np.pi*self.multi
+            vecMRotation = np.array([[1, 0, 0], [0, np.cos(thetaX), np.sin(thetaX)], \
+                                    [0, -np.sin(thetaX), np.cos(thetaX)]])
+            vecMRotation = np.tile(vecMRotation,(self.noOfIsochromatsZ,1,1))
 
-        #rotation (pulse) flips spins from aligned with the z-axis to
-        #aligned with the x-axis
-        #Rotates around the x axis, no rotY because it is redundant ID matrix
-        for theta in range(len(thetaX)):
-            rotX[theta,:,:] = np.array([[1, 0, 0], [0, np.cos(thetaX[theta]), np.sin(thetaX[theta])], \
-                            [0, -np.sin(thetaX[theta]), np.cos(thetaX[theta])]])
-            rotY[theta,:,:] = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
-        vecMRotation = np.matmul(rotY,rotX) 
+            # Updating the magnetization vector matricies
+            #For tissue
+            #self.vecMArrayTissue = np.matmul(vecMRotation,self.vecMArrayTissue)
+            self.vecMArrayTissue = np.einsum("...ij,...j", vecMRotation, self.vecMArrayTissue[..., 0])[..., None]
+            #For blood 
+            #self.vecMArrayBlood = np.matmul(vecMRotation,self.vecMArrayBlood)
+            self.vecMArrayBlood = np.einsum("...ij,...j", vecMRotation, self.vecMArrayBlood[..., 0])[..., None]
 
-        """
+        if self.sequence == 'SPGRE':
+            thetaX = np.pi*self.multi*0.8
 
-        vecMRotation = np.array([[1, 0, 0], [0, np.cos(thetaX), np.sin(thetaX)], \
-                                            [0, -np.sin(thetaX), np.cos(thetaX)]])
-        
-        vecMRotation = np.tile(vecMRotation,(self.noOfIsochromatsZ,1,1))
+            vecMRotation = np.array([[1, 0, 0], [0, np.cos(thetaX), np.sin(thetaX)], \
+                                    [0, -np.sin(thetaX), np.cos(thetaX)]])
+            vecMRotation = np.tile(vecMRotation,(self.noOfIsochromatsZ,1,1))
 
-        # Updating the magnetization vector matricies
-        #For tissue
-        #self.vecMArrayTissue = np.matmul(vecMRotation,self.vecMArrayTissue)
-        self.vecMArrayTissue = np.einsum("...ij,...j", vecMRotation, self.vecMArrayTissue[..., 0])[..., None]
-        #For blood 
-        #self.vecMArrayBlood = np.matmul(vecMRotation,self.vecMArrayBlood)
-        self.vecMArrayBlood = np.einsum("...ij,...j", vecMRotation, self.vecMArrayBlood[..., 0])[..., None]
+            # Updating the magnetization vector matricies
+            #For tissue
+            #self.vecMArrayTissue = np.matmul(vecMRotation,self.vecMArrayTissue)
+            self.vecMArrayTissue = np.einsum("...ij,...j", vecMRotation, self.vecMArrayTissue[..., 0])[..., None]
+            #For blood 
+            #self.vecMArrayBlood = np.matmul(vecMRotation,self.vecMArrayBlood)
+            self.vecMArrayBlood = np.einsum("...ij,...j", vecMRotation, self.vecMArrayBlood[..., 0])[..., None]
 
         return None
     
-    def longTR(self, remainingDuration, totalTime):
+    def longTR(self, remainingDuration, totalTime, signal_flag = 'False'):
             """
             Calculation of the relaxation that occurs as the remaining TR plays out for a
             group of isochromats in a two compartment model.
@@ -309,6 +319,17 @@ class DictionaryGeneratorFast():
             #The stored array is then updated
             self.vecMArrayBlood = vecMIsochromat
 
+            #If the total time that has passed corresponds to the time at which
+            # there is an echo peak:
+            if int(totalTime/self.deltaT) in self.signalDivide and signal_flag == True: 
+                vecMArray = np.concatenate((self.vecMArrayTissue,self.vecMArrayBlood),axis=0)
+                #Get the index of the peak (what number peak is it?)
+                signalDivide = list(self.signalDivide)
+                ind = signalDivide.index(int(totalTime/self.deltaT))
+                #Then input the magentization array at that time into the siganl
+                # holder array
+                self.signal[:,0,:,:,ind] = np.squeeze(vecMArray)
+
             return totalTime    
     
     def rfpulse(self, loop):
@@ -340,16 +361,25 @@ class DictionaryGeneratorFast():
             Array of magnetization vectors for the blood compartment
         
         """
-        
-        faInt = int(self.faArray[loop]*100)
-        #Extract the flip angle of this loop (degrees)
-        if faInt != 0:
-            try: 
-                fa = self.multi*self.sliceProfile[faInt-1,:]
-            except: 
-                fa = self.multi*np.ones([self.noOfIsochromatsZ])*180
-        else: 
-            fa = self.multi*np.zeros([self.noOfIsochromatsZ])*180
+        originalFAFISP = False # flag for slice profile of original FISP paper
+
+        # Flag for integer flip angles
+        if originalFAFISP == False:
+            faInt = int(self.faArray[loop]*100)
+            
+            #Extract the flip angle of this loop (degrees)
+            if faInt != 0:
+                try: 
+                    fa = self.multi*self.sliceProfile[faInt-1,:]
+                except: 
+                    fa = self.multi*np.ones([self.noOfIsochromatsZ])*180 
+                    
+            else: 
+                fa = self.multi*np.zeros([self.noOfIsochromatsZ])*180
+
+        if originalFAFISP == True:
+            fa = self.multi*np.ones([self.noOfIsochromatsZ])*(self.faArray[loop])
+                
         
         #Convert to radians
         thetaX = ((fa/360)*2*np.pi)  
@@ -643,6 +673,7 @@ class DictionaryGeneratorFast():
                 #vecMIsochromat = np.matmul(precessionTissue, self.vecMArrayTissue)
                 vecMIsochromat = np.einsum("...ij,...j", precessionTissue, self.vecMArrayTissue[..., 0])[..., None]
                 
+                
                 # The magnitude change due to relaxation is then applied to each
                 # coordinate
                 vecMIsochromat[:,:,:,0,:] *= exp_delta_t_t2_star_tissue
@@ -650,11 +681,13 @@ class DictionaryGeneratorFast():
                 vecMIsochromat[:,:,:,2,:] = one_minus_exp_delta_t_t1_tissue + vecMIsochromat[:,:,:,2,:]*exp_delta_t_t1_tissue
                 #The stored array is then updated
                 self.vecMArrayTissue = vecMIsochromat
+                
 
                 #Multiply by the precession rotation matrix (incremental for each deltaT)
                 #vecMIsochromat = np.matmul(precessionBlood, self.vecMArrayBlood)
                 vecMIsochromat = np.einsum("...ij,...j", precessionBlood, self.vecMArrayBlood[..., 0])[..., None]
 
+                
                 # The magnitude change due to relaxation is then applied to each
                 # coordinate
                 vecMIsochromat[:,:,:,0,:] *= exp_delta_t_t2_star_blood
@@ -662,6 +695,7 @@ class DictionaryGeneratorFast():
                 vecMIsochromat[:,:,:,2,:] = one_minus_exp_delta_t_t1_blood + vecMIsochromat[:,:,:,2,:]*exp_delta_t_t1_blood
                 #The stored array is then updated
                 self.vecMArrayBlood = vecMIsochromat
+                
 
                 #Combine tissue and blood compartments to give the total magnetization 
                 # vector array
@@ -705,7 +739,7 @@ class DictionaryGeneratorFast():
     
         """Gradient parameters"""
         # Maximum gradient height
-        magnitudeOfGradient  = -8e-3*np.pi #UNIT: T/m
+        magnitudeOfGradient  = -(2e-3)*np.pi #UNIT: T/m
 
         ### Set the duration of the gradients applied to have the echo peak occur at TE
         firstGradientDuration = self.TE/2
@@ -719,7 +753,7 @@ class DictionaryGeneratorFast():
         '''
         
         ### Include an inversion recovery pulse to null CSF :'0' - No, '1' - 'Yes'      
-        if self.inv == 1 and self.sequence =='SPGRE':
+        if self.inv == 1 and self.CSF_null == True:
 
             # T1 of CSF set to 4500 ms from  Shin W, Gu H, Yang Y. 
             #Fast high-resolution T1 mapping using inversion-recovery Look–Locker
@@ -744,6 +778,12 @@ class DictionaryGeneratorFast():
             # Allow time for inversion recovery to null CSF
             #variable timeChuck to hold the array we dont want
             timeChuck = self.longTR(int(tNull), totalTime)
+
+        elif self.inv ==1 and self.sequence == 'FISP' and self.CSF_null == False:
+            self.invpulse(loop=0)
+            inv_time = 20
+            timeChuck = self.longTR(inv_time, totalTime)
+
             
             
         '''
@@ -754,10 +794,10 @@ class DictionaryGeneratorFast():
 
         ### Loop over each TR repetitions
         for loop in range(self.noOfRepetitions):
-            """
             '''
             WATER EXCHANGE
             '''  
+            np.random.seed(0) # remove later
             # loop time added for each iteration
             repTime = self.trRound[loop]
             #Generate array for storing reseidence time for exchange isochromat
@@ -792,7 +832,7 @@ class DictionaryGeneratorFast():
             reset = reset*1
             timeArray = timeArray * reset 
 
-            """
+            
             if self.sequence == 'SPGRE':                              
                 ###    RF PULSE
                 #Application of RF pulse modifying the vecM arrays
@@ -814,7 +854,6 @@ class DictionaryGeneratorFast():
                 #Apply second gradient lobe (traversing k-space)       
                 self.gradientX = magnitudeOfGradient
                 self.gradientY = -magnitudeOfGradient
-            
                 
                 ## SECOND GRADIENT - DOUBLE LENGTH
                 #Precession occuring during gradient application 
@@ -833,62 +872,57 @@ class DictionaryGeneratorFast():
                 totalTime = self.longTR((self.trRound[loop]-passed), totalTime)
             
             elif self.sequence == 'FISP':
+
+                HYDRA = False
                 
                 # Fist, set the T2_star array to equal the T2_array because T2_star isn't
                 # relevant here, and all of the implementation on code relies on T2_star
                 self.t2StarArray = self.t2Array
-
-                """
-                # First 'prep' gradient applied
-                self.gradientX = -magnitudeOfGradient # the gradient needs to be positive, so make the variable negative
-                self.gradientY = -magnitudeOfGradient
-                # Precession during gradient
-                totalTime = self.applied_precession(firstGradientDuration, totalTime)
-                """
                 
                 # From https://cds.ismrm.org/protected/18MProceedings/PDFfiles/images/1274/ISMRM2018-001274_Fig3.png (FISP)
                 # Apply the RF pulse for the current FA
                 self.rfpulse(loop)
 
-                # Apply first post-pulse gradient
-                self.gradientX = magnitudeOfGradient
-                self.gradientY = -magnitudeOfGradient
-                # Precession during gradient
-                totalTime = self.applied_precession(firstGradientDuration, totalTime)
+                if HYDRA == False:
+                    # Apply first post-pulse gradient
+                    self.gradientX = magnitudeOfGradient
+                    self.gradientY = -magnitudeOfGradient
+                    # Precession during gradient
+                    totalTime = self.applied_precession(firstGradientDuration, totalTime)
 
-                # Apply gradient for twice as long
-                self.gradientX = -magnitudeOfGradient
-                self.gradientY = magnitudeOfGradient
-                # Precession during gradient
-                totalTime = self.applied_precession(secondGradientDuration, totalTime)
+                    # Apply gradient for twice as long
+                    self.gradientX = -magnitudeOfGradient
+                    self.gradientY = magnitudeOfGradient
+                    # Precession during gradient
+                    totalTime = self.applied_precession(secondGradientDuration, totalTime)
 
-                # Apply crusher gradient
-                self.gradientX = -magnitudeOfGradient
-                self.gradientY = magnitudeOfGradient
-                # Precession during gradient
-                totalTime = self.applied_precession(firstGradientDuration, totalTime)
+                    # Apply crusher gradient
+                    self.gradientX = -magnitudeOfGradient
+                    self.gradientY = magnitudeOfGradient
+                    # Precession during gradient
+                    totalTime = self.applied_precession(firstGradientDuration, totalTime,signal_flag=False)
 
-                # Calculate time passed
-                passed = (self.pulseDuration + firstGradientDuration*2 + secondGradientDuration)
-                
-                # Allow remaining TR time
-                totalTime = self.longTR((self.trRound[loop]-passed), totalTime)
+                    # Calculate time passed
+                    passed = (self.pulseDuration + firstGradientDuration*2 + secondGradientDuration)
+                    
+                    # Allow remaining TR time
+                    totalTime = self.longTR((self.trRound[loop]-passed), totalTime, signal_flag=False)
 
-                """
-                    if HYDRA == True:
+               
+                if HYDRA == True:
                     # The Song (HYDRA2019) FISP
                 
                         # FID after pulse for TE and then sample signal
-                        totalTime = self.longTR(self.TE, totalTime)
+                        totalTime = self.longTR(self.TE, totalTime, signal_flag = True)
 
                         # Allow relaxation and unbalanced 'spoiler gradient' 
                         passed = self.TE + self.pulseDuration
                         spoilerTime = self.TE/2
-                        totalTime = self.longTR(self.trRound[loop]-passed-spoilerTime, totalTime)
+                        totalTime = self.longTR(self.trRound[loop]-passed-spoilerTime, totalTime, signal_flag = False)
                         self.gradientX = -magnitudeOfGradient
                         self.gradientY = magnitudeOfGradient
                         totalTime = self.applied_precession(spoilerTime, totalTime, signal_flag=False)
-                """
+                
 
 
         '''
