@@ -62,31 +62,31 @@ def parameterGeneration():
     noOfIsochromatsY = 1
     noOfIsochromatsZ = 10 
     # TR train length
-    noOfRepetitions = 1000 #1000 FISP
+    noOfRepetitions = 2000 #1000 FISP
     
     ## TISSUE PROPERTIES
     #Assign initial arrays for the tissue values 
     #Format:    array = [tissue value, blood value] 
     # Units: ms
     #t1Array = np.array([1300,1800])
-    t2Array = np.array([275,109]) # values from lizzie's paper: Tissue 55ms-275ms, Blood: 60ms-109ms
+    t2Array = np.array([71,165]) #np.array([71,165]) # T2 blood value taken from average range from Powell et al. [55-275]ms
     t2StarArray = np.array([50,21])
 
     
      
      ## FIX ME
-    inv = True
+    inv = 0
     ## DEFINITION OF VARIATIONS
     
     # Specify the ranges and step sizes of the dictionary dimensions
     # intravascular water residence time (res) UNIT: ms
-    resArray = [200, 1700]#range(200,1700,107) #range(200,1700,107) #range(200,1700,70) 
+    resArray = [200, 1600]#range(200,1700,107) #range(200,1700,107) #range(200,1700,70) 
     # percentage blood volume (perc) UNIT: %
-    percArray = [10, 110]#range(10,110,7) #REMEMBER IT WILL BE DIVIDED BY 10 110
+    percArray = [50]#range(10,110,7) #REMEMBER IT WILL BE DIVIDED BY 10 110
     #T1 of tissue compartment (t1t) UNIT: ms
-    t1tArray = [700] #range(700,1700,69) 
+    t1tArray = [1122] #range(700,1700,69) 
     #T1 of blood compartment (t1b) UNIT: ms
-    t1bArray = [1540] #range(1540,1940,27) 
+    t1bArray = [1627] #[1627] #range(1540,1940,27) 
     # multiplication factor for the B1 value (multi)
     multiArray = [100] #range(70, 120, 3) #100
 
@@ -99,7 +99,7 @@ def parameterGeneration():
     #In folder will show as "DictionaryXXX" 
     #This folder needs to already exist or code will not run 
 
-    dictionaryId  = 'FISP'
+    dictionaryId  = 'FISP_WEX'
 
     ## SHAPE OF VARIATIONS
     
@@ -113,19 +113,22 @@ def parameterGeneration():
     #            width of half peak = pi*b 
     #       gaps: same as sinusoidal but with user specifed sections of zero FA 
     #             without editing gaps will be after every 250 FAs (can be edited below)
-    caseFA = 'FISP' #'sin' #'random'  #'gaps' 'FISP'
-    a = 13; b = 40
+    caseFA = 'sin' #'sin' #'random'  #'gaps' 'FISP'
+
     # For repetition time [ms]: 
     #       random: random variation in FA between two values: d and e
     #       sin: sinusoidal variation with min TR = d, max TR = 2*e+d, period = 2*pi*c
-    caseTR = 'perlin' # #'sin' #'random' 'perlin' for FISP use last
-    c =181; d = 100; e = 45
+    caseTR = 'sin' # #'sin' #'random' 'perlin' for FISP use last
+    
+    states = [7.98044503, 165.97916497,  56.86092354,   5.1824385,   13.56207501]
+    a= states[0]; b = states[1]; c = states[2];  d = states[3]; e = states[4]
+
     
     #If you want gaps in the flip angles, specify width here 
     if caseFA == 'gaps':
         gapLength = 50
 
-    CSFnullswitch = True
+    CSFnullswitch = False
 
     ''' ------------------------PARAMETER VARIATIONS-------------------------- '''
     
@@ -142,8 +145,9 @@ def parameterGeneration():
             +  np.random.uniform(0,0,[1,noOfRepetitions]))
         # There may be a loss of SNR when the first flip angle is v low (e.g. 0.008)
         # so change the first flip angle to be a little higher
-        if CSFnullswitch == True:
+        if inv == 1:
             faArray[0] = 180
+       
         
 
     if caseFA == 'FISP':
@@ -176,7 +180,7 @@ def parameterGeneration():
         """
         # actual original fisp paper values
         faArray = np.genfromtxt('fa_jiang', delimiter=',', dtype=float) 
-        if CSFnullswitch == True:
+        if inv == 1:
             faArray[0] = 180
 
     elif caseFA == 'gaps':
@@ -196,7 +200,7 @@ def parameterGeneration():
         faArray = np.load('fa_cao.npy') 
 
     elif caseFA=='test':
-        faArray = np.ones((noOfRepetitions,))
+        faArray = np.ones((noOfRepetitions,))*50
 
     elif caseFA=='automeris':
         faArray = np.genfromtxt('FA_FISP.csv')[:,1]
@@ -215,8 +219,9 @@ def parameterGeneration():
         xRange = np.linspace(0,noOfRepetitions,num=noOfRepetitions)
         #Calculate the sinusoidal array 
         trArray = e*np.sin(xRange/c)+(d+e)
-        if inv == True and seq=='SPGRE':
+        if CSFnullswitch == True:
             trArray[0] = 2909
+
     elif caseTR == 'random':
         #Generate a uniform random array between for the number of repetitions
         trArray = np.random.uniform(d,e,[noOfRepetitions])
@@ -239,7 +244,7 @@ def parameterGeneration():
         trArray = np.load('tr_cao.npy') 
 
     elif caseTR=='test':
-        trArray = np.ones((noOfRepetitions,)) * 10
+        trArray = np.ones((noOfRepetitions,))*40
         
 
 
@@ -280,11 +285,11 @@ def simulationFunction(paramArray):
     from DictionaryGeneratorFast import DictionaryGeneratorFast
     
     #Is there an inversion pulse
-    invSwitch = True
+    invSwitch = False
     # Is slice profile accounted for
-    sliceProfileSwitch = True
+    sliceProfileSwitch = False
     #Null CSF using inversion
-    CSFnullswitch = True
+    CSFnullswitch = False
     # Number of noise samples generated 
     # Set to one for dictionary gneeration 
     samples = 1
