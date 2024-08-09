@@ -62,7 +62,7 @@ def parameterGeneration():
     noOfIsochromatsY = 1
     noOfIsochromatsZ = 10 
     # TR train length
-    noOfRepetitions = 2000 #1000 FISP
+    noOfRepetitions = 1000 #1000 FISP
     
     ## TISSUE PROPERTIES
     #Assign initial arrays for the tissue values 
@@ -113,15 +113,17 @@ def parameterGeneration():
     #            width of half peak = pi*b 
     #       gaps: same as sinusoidal but with user specifed sections of zero FA 
     #             without editing gaps will be after every 250 FAs (can be edited below)
-    caseFA = 'sin' #'sin' #'random'  #'gaps' 'FISP'
+    caseFA = 'FISP' #'sin' #'random'  #'gaps' 'FISP'
 
     # For repetition time [ms]: 
     #       random: random variation in FA between two values: d and e
     #       sin: sinusoidal variation with min TR = d, max TR = 2*e+d, period = 2*pi*c
-    caseTR = 'sin' # #'sin' #'random' 'perlin' for FISP use last
+    caseTR = 'test' # #'sin' #'random' 'perlin' for FISP use last
     
-    states = [7.98044503, 165.97916497,  56.86092354,   5.1824385,   13.56207501]
-    a= states[0]; b = states[1]; c = states[2];  d = states[3]; e = states[4]
+    #states = [7.98044503, 165.97916497,  56.86092354,   5.1824385,   13.56207501]
+    #a= states[0]; b = states[1]; c = states[2];  d = states[3]; e = states[4]
+    states = [29.12221811, 21.47989915, 18.93349848, 23.52843918, 26.41568094, 76.97102555,9.34360838, 13.21382078]
+    a = states[0]; b = states[1]; c = states[2];  d = states[3]; e = states[4]; f = states[5]; g = states[6]; h = states[7]
 
     
     #If you want gaps in the flip angles, specify width here 
@@ -150,10 +152,14 @@ def parameterGeneration():
        
         
 
-    if caseFA == 'FISP':
+    if caseFA == 'FISPorig':
         # From https://onlinelibrary.wiley.com/doi/epdf/10.1002/mrm.25559
+        # actual original fisp paper values
+        faArray = np.genfromtxt('fa_jiang', delimiter=',', dtype=float) 
+        if inv == 1:
+            faArray[0] = 180
 
-        """ TO AUTO GEN
+    if caseFA == 'FISP':
         # Set the number of points
         Nrf = 200
         noOfRepetitions = 1000
@@ -161,7 +167,7 @@ def parameterGeneration():
         faArray = []
         min_angle = 5
         #ßmaxFA = random.sample(range(5,90),int(cycles)) # random sample of flip angles
-        maxFA = [35-min_angle,43-min_angle,70-min_angle,46-min_angle,27-min_angle] # values from the paper
+        maxFA = [a-min_angle,b-min_angle,c-min_angle,d-min_angle,e-min_angle] # values from the paper
         for i in range(int(cycles)):
             # Current random flip angle
             maxFA_i = maxFA[i]
@@ -177,11 +183,7 @@ def parameterGeneration():
         #if CSFnullswitch == True:
         #    faArray[0] = 180
 
-        """
-        # actual original fisp paper values
-        faArray = np.genfromtxt('fa_jiang', delimiter=',', dtype=float) 
-        if inv == 1:
-            faArray[0] = 180
+        
 
     elif caseFA == 'gaps':
         #As above: 
@@ -218,7 +220,9 @@ def parameterGeneration():
         #Generate linearly spaced array between 0 and the number repetitions 
         xRange = np.linspace(0,noOfRepetitions,num=noOfRepetitions)
         #Calculate the sinusoidal array 
-        trArray = e*np.sin(xRange/c)+(d+e)
+        #trArray = e*np.sin(xRange/c)+(d+e) FOR SIN FA
+        #trArray = h*np.sin(xRange/f)+(g+h)
+        trArray = 0.5*((g-h)*np.sin(xRange*f/2*np.pi)+(g+h))
         if CSFnullswitch == True:
             trArray[0] = 2909
 

@@ -7,12 +7,22 @@ import numpy.matlib as mat
 import sys
 import optim_TR_FA_gen as TRFA
 
+
 sys.path.insert(0, "./functions/")
 from DictionaryGeneratorFast import DictionaryGeneratorFast
 
-def func(a_max, w_a, freq, TRmin, TRmax):
+""" Cost function for signal optimisation"""
+
+def func(permutation):
+
+        if len(permutation)== 5: # this size is for a trType == 'sin' and faType == 'sin'
+                a_max=permutation[0]; w_a=permutation[1]; freq=permutation[2]; TRmin=permutation[3]; TRmax=permutation[4]
+
+        elif len(permutation)== 8: # this size is for a trType == 'sin' and faType == 'FISP'
+                peaks= np.array(permutation[0:5]); freq=permutation[5]; TRmin=permutation[6]; TRmax=permutation[7]
+
         # change this code so the input is a parameter array, put if statements for each generation of parameters to keep it general
-    # Initial guess
+        # Initial guess
         noOfRepetitions = 2000
         noOfIsochromatsX = 1000
         noOfIsochromatsY = 1
@@ -40,10 +50,18 @@ def func(a_max, w_a, freq, TRmin, TRmax):
         CSFnullswitch = True
         sliceProfileSwitch = True
         sequence = 'FISP'
+        trType = 'sin'
+        faType = 'FISP'
         
-        trArray = TRFA.sinusoidal_TR(TRmax, TRmin, freq, noOfRepetitions, instance, save = True)
-        faArray = TRFA.sinusoidal_FA(a_max, noOfRepetitions, w_a, instance, save = True)
-        readTRFA = False
+        if trType == 'sin' and faType == 'sin':
+                trArray = TRFA.sinusoidal_TR(TRmax, TRmin, freq, noOfRepetitions, instance, save = False)
+                faArray = TRFA.sinusoidal_FA(a_max, noOfRepetitions, w_a, instance, save = False)
+        elif trType == 'sin' and faType == 'FISP':
+                trArray = TRFA.sinusoidal_TR(TRmax, TRmin, freq, noOfRepetitions, instance, save = False)
+                faArray = TRFA.FISP_FA(peaks, noOfRepetitions, instance, save = False)
+        
+        
+        readTRFA = False # flag for whether to read TR/FA from a file. This can intefere with parallelism
         
 
         dictionaryGeneratorMin = DictionaryGeneratorFast(t1Array, t2Array, t2StarArray, noOfIsochromatsX,\
@@ -63,4 +81,4 @@ def func(a_max, w_a, freq, TRmin, TRmax):
 def costFunction(permutation):
         """ Cost of x = f(x)."""
         #return func(permutation[0], permutation[1], permutation[2], permutation[3], permutation[4])
-        return func(permutation[0], permutation[1], permutation[2], permutation[3], permutation[4])
+        return func(permutation)

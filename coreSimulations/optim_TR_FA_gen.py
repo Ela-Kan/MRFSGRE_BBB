@@ -12,8 +12,8 @@ import sys
 def sinusoidal_TR(TRmax, TRmin, freq, N, instance, CSFnullswitch = True, save = True):
     
     N_arr = np.linspace(0,N,num=N)
-    trArray = (TRmax*np.sin(N_arr/freq)+(TRmax+TRmin))
-    #trArray = 0.5*((TRmax-TRmin)*np.sin(N_arr*freq/2*np.pi)+(TRmax+TRmin))
+    #trArray = (TRmax*np.sin(N_arr/freq)+(TRmax+TRmin))
+    trArray = 0.5*((TRmax-TRmin)*np.sin(N_arr*freq/2*np.pi)+(TRmax+TRmin))
 
     if CSFnullswitch == True:
         trArray[0] = 2909
@@ -49,7 +49,7 @@ def sinusoidal_FA(a_max, N, w_a, instance, invSwitch = True, save = True):
     return faArray
 
 
-def FISP_FA(N, peaks, instance, invSwitch = True, save = True):
+def FISP_FA(peaks, N, instance, invSwitch = True, save = True):
 
     # variation from Jiang Paper. Peaks = 1 x 5 input indicating the peaks of the variation
     
