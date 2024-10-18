@@ -29,6 +29,8 @@ import pstats
 from line_profiler import LineProfiler
 from perlin_noise import PerlinNoise
 import random
+import optim_TR_FA_gen as TF
+
 
 #go up a folder
 #os.chdir("..")
@@ -58,51 +60,57 @@ def parameterGeneration():
     # noOfIsochromatsX MUST be divisible by the vb steps
     # i.e. if 1% blood volume steps are required then need noOfIsochromatsX = 100 
     #      if 0.1% blood volume steps are required, noOfIsochromatsX = 1000 etc.
-    noOfIsochromatsX = 1000
+    noOfIsochromatsX = 1000 #1000
     noOfIsochromatsY = 1
-    noOfIsochromatsZ = 10 
+    noOfIsochromatsZ = 10 #number of samples in HALF of the profile
     # TR train length
-    noOfRepetitions = 1000 #1000 FISP
+    noOfRepetitions = 1000 #1000 #1000 FISP
     
     ## TISSUE PROPERTIES
     #Assign initial arrays for the tissue values 
     #Format:    array = [tissue value, blood value] 
     # Units: ms
     #t1Array = np.array([1300,1800])
-    t2Array = np.array([71,165]) #np.array([71,165]) # T2 blood value taken from average range from Powell et al. [55-275]ms
+    #t2Array = np.array([72,165]) #np.array([71,165]) # T2 blood value taken from average range from Powell et al. [55-275]ms
     t2StarArray = np.array([50,21])
 
     
      
      ## FIX ME
-    inv = 0
+    inv = 1
     ## DEFINITION OF VARIATIONS
     
     # Specify the ranges and step sizes of the dictionary dimensions
     # intravascular water residence time (res) UNIT: ms
-    resArray = [200, 1600]#range(200,1700,107) #range(200,1700,107) #range(200,1700,70) 
+    resArray = range(200,1700,100) #range(200,1700,107) #range(200,1700,70) 
     # percentage blood volume (perc) UNIT: %
-    percArray = [50]#range(10,110,7) #REMEMBER IT WILL BE DIVIDED BY 10 110
+    percArray = range(10,110,10) #REMEMBER IT WILL BE DIVIDED BY 10 110
     #T1 of tissue compartment (t1t) UNIT: ms
-    t1tArray = [1122] #range(700,1700,69) 
+    t1tArray = range(1000,2200,200) #range(700,1700,69) 
     #T1 of blood compartment (t1b) UNIT: ms
-    t1bArray = [1627] #[1627] #range(1540,1940,27) 
+    t1bArray = range(1500,2100,200) #range(1540,1940,27) 
     # multiplication factor for the B1 value (multi)
-    multiArray = [100] #range(70, 120, 3) #100
+    multiArray = range(80, 130, 10) #100
+    # T2 of tissue compartment UNIT: ms
+    t2tArray = range(38,127,15)
+    # T2 of blood compartment UNIT: ms
+    t2bArray = range(55, 385, 110)
+    if t2tArray[-1] > 112:
+        t2tArray= list(t2tArray)
+        t2tArray[-1] = 112
 
     ## NOISE INFORMATION 
     # number of noise levels
     # for dictionary generation for comparison to experimental data set to one 
-    noise = 1
-    
+    noise = 9
     #The dictionary folder identifier
     #In folder will show as "DictionaryXXX" 
     #This folder needs to already exist or code will not run 
 
-    dictionaryId  = 'FISP_WEX'
+    dictionaryId  = 'FISP_WEX_ISMRM'
 
     ## SHAPE OF VARIATIONS
-    
+    # TODO: add extra shape variations documentation
    # Variations of the flip angle and repetition time have constrained shapes 
     # dictated by 5 parameters (a-e). They are also dicated by an overall shape 
     # specified here  
@@ -113,24 +121,29 @@ def parameterGeneration():
     #            width of half peak = pi*b 
     #       gaps: same as sinusoidal but with user specifed sections of zero FA 
     #             without editing gaps will be after every 250 FAs (can be edited below)
-    caseFA = 'FISP' #'sin' #'random'  #'gaps' 'FISP'
+    caseFA = 'FISP' #'sin' #'random'  #'gaps' 'FISP' 'FISPorig'
+    b1sens= True # changes the shape of the FA train; instead of Jiang et al. variation, it becomes the variation from doi: 10.1002/mrm.26009
 
     # For repetition time [ms]: 
     #       random: random variation in FA between two values: d and e
     #       sin: sinusoidal variation with min TR = d, max TR = 2*e+d, period = 2*pi*c
-    caseTR = 'test' # #'sin' #'random' 'perlin' for FISP use last
+    caseTR = 'sin' # #'sin' #'random' 'perlin' for FISP use last
     
-    #states = [7.98044503, 165.97916497,  56.86092354,   5.1824385,   13.56207501]
+    #states = [8.77345817, 147.49943504, 398.3546085, 5.81103981, 17.98150172]
     #a= states[0]; b = states[1]; c = states[2];  d = states[3]; e = states[4]
-    states = [29.12221811, 21.47989915, 18.93349848, 23.52843918, 26.41568094, 76.97102555,9.34360838, 13.21382078]
-    a = states[0]; b = states[1]; c = states[2];  d = states[3]; e = states[4]; f = states[5]; g = states[6]; h = states[7]
-
+    states = [8.90191785e+01, 8.50678055e+01, 8.88994604e+01, 8.98932576e+01,1.44671580e-03, 6.56840603e+01, 1.97728279e+02]
+    #states = [8.93273745e+01, 8.75231041e+01, 8.60932821e+01, 8.93060107e+01, 8.96990601e+01, 1.50754408e-03, 7.09833061e+01, 1.95289453e+02]
     
     #If you want gaps in the flip angles, specify width here 
     if caseFA == 'gaps':
-        gapLength = 50
+        gapLength = 80
 
-    CSFnullswitch = False
+    if caseFA == 'tester':
+        faArray = [90]
+
+    CSFnullswitch = True
+
+    #a = 13; b = 40; c =181; d = 100; e = 45 SPGRE
 
     ''' ------------------------PARAMETER VARIATIONS-------------------------- '''
     
@@ -149,8 +162,6 @@ def parameterGeneration():
         # so change the first flip angle to be a little higher
         if inv == 1:
             faArray[0] = 180
-       
-        
 
     if caseFA == 'FISPorig':
         # From https://onlinelibrary.wiley.com/doi/epdf/10.1002/mrm.25559
@@ -160,6 +171,7 @@ def parameterGeneration():
             faArray[0] = 180
 
     if caseFA == 'FISP':
+        """
         # Set the number of points
         Nrf = 200
         noOfRepetitions = 1000
@@ -167,7 +179,8 @@ def parameterGeneration():
         faArray = []
         min_angle = 5
         #ßmaxFA = random.sample(range(5,90),int(cycles)) # random sample of flip angles
-        maxFA = [a-min_angle,b-min_angle,c-min_angle,d-min_angle,e-min_angle] # values from the paper
+        #maxFA = [a-min_angle,b-min_angle,c-min_angle,d-min_angle,e-min_angle] # values from the paper
+        maxFA = [88,88,88,88,88,88,88,88,88,88] # values from the paper
         for i in range(int(cycles)):
             # Current random flip angle
             maxFA_i = maxFA[i]
@@ -180,8 +193,12 @@ def parameterGeneration():
             faArray += [0,0,0,0,0,0,0,0,0,0]
         faArray = faArray[:noOfRepetitions]
 
-        #if CSFnullswitch == True:
-        #    faArray[0] = 180
+        if CSFnullswitch == True:
+            faArray[0] = 180
+        """
+        peaks = np.array(states[:-3]) # the final three elements in the state array relate to TR
+
+        faArray = TF.FISP_FA(peaks, noOfRepetitions, instance, invSwitch=True, save = False, b1Sensitivity=b1sens)
 
         
 
@@ -215,16 +232,17 @@ def parameterGeneration():
     np.save('./functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
 
     ##  DEFINING TR ARRAY
-    seq = 'FISP'
+  
     if caseTR == 'sin':
+        """
         #Generate linearly spaced array between 0 and the number repetitions 
         xRange = np.linspace(0,noOfRepetitions,num=noOfRepetitions)
         #Calculate the sinusoidal array 
-        #trArray = e*np.sin(xRange/c)+(d+e) FOR SIN FA
-        #trArray = h*np.sin(xRange/f)+(g+h)
-        trArray = 0.5*((g-h)*np.sin(xRange*f/2*np.pi)+(g+h))
+        trArray = e*np.sin(xRange/c)+(d+e) #FOR SIN FA SPGRE
         if CSFnullswitch == True:
             trArray[0] = 2909
+        """
+        trArray = TF.sinusoidal_TR(TRmax=states[-1], TRmin=states[-2], freq=states[-3], N = noOfRepetitions, instance= instance, CSFnullswitch = CSFnullswitch, save = False)
 
     elif caseTR == 'random':
         #Generate a uniform random array between for the number of repetitions
@@ -247,7 +265,7 @@ def parameterGeneration():
     elif caseTR =='cao':
         trArray = np.load('tr_cao.npy') 
 
-    elif caseTR=='test':
+    elif caseTR=='tester':
         trArray = np.ones((noOfRepetitions,))*40
         
 
@@ -257,11 +275,11 @@ def parameterGeneration():
 
     #Get all combinations of arrays (parameters for each dictionary entry)
     #In format of list of tuples
-    params = list(itertools.product(t1tArray, t1bArray, resArray, percArray, multiArray))
+    params = list(itertools.product(t1tArray, t1bArray, resArray, percArray, multiArray, t2tArray, t2bArray))
     params = np.array(params)
     #Generate a list of the remaining parameters than need to be passed into
     #the main function 
-    otherParams = list([t2Array, t2StarArray, noOfIsochromatsX, noOfIsochromatsY,
+    otherParams = list([t2StarArray, noOfIsochromatsX, noOfIsochromatsY,
                         noOfRepetitions,noise, dictionaryId, instance, noOfIsochromatsZ])
     otherParams = np.tile(np.array(otherParams, dtype=object),[np.size(params,0),1])
     
@@ -291,26 +309,26 @@ def simulationFunction(paramArray):
     #Is there an inversion pulse
     invSwitch = False
     # Is slice profile accounted for
-    sliceProfileSwitch = False
+    sliceProfileSwitch = True
     #Null CSF using inversion
     CSFnullswitch = False
     # Number of noise samples generated 
     # Set to one for dictionary gneeration 
-    samples = 1
+    samples = 50
     
     parameters = tuple(paramArray)
 
     t1Array = np.array([parameters[0],parameters[1]])
     #These parameters are: 
-    # t1Array, t2Array, t2StarArray, noOfIsochromatsX, noOfIsochromatsY, 
-    # noOfIsochromatsZ, noOfRepetitions, noise, perc, res, multi, inv, 
-    # sliceProfileSwitch, samples, dictionaryId, instance
-
+ # t1Array, t2Array, t2StarArray, noOfIsochromatsX,
+ #              noOfIsochromatsY, noOfIsochromatsZ, noOfRepetitions, noise, perc, res,
+ #              multi, inv, CSFnullswitch, sliceProfileSwitch, samples, dictionaryId, sequence, instance
+    t2Array = np.array([parameters[5],parameters[6]])
     #Initialise the dictionary generator
-    dictionaryGenerator =  DictionaryGeneratorFast(t1Array, parameters[5], parameters[6],
-            parameters[7], parameters[8], parameters[13],
-            parameters[9], parameters[10], parameters[3]/10, parameters[2],
-            parameters[4]/100,invSwitch, CSFnullswitch, sliceProfileSwitch, samples, parameters[11], 'FISP', parameters[12])
+    dictionaryGenerator =  DictionaryGeneratorFast(t1Array, t2Array,
+            parameters[7], parameters[8], parameters[9],parameters[14],
+            parameters[10], parameters[11], parameters[3]/10, parameters[2],
+            parameters[4]/100,invSwitch, CSFnullswitch, sliceProfileSwitch, samples, parameters[12], 'FISP', parameters[13])
     
     profile = False # Set to True to profile the function to test for bottle necks (default is False)
 
@@ -379,7 +397,7 @@ if __name__ == '__main__':
 
     #Generate the parameters
     params = parameterGeneration()
-
+    
 
     #Run main function in parallel 
     #Current laptop (2021 M1 Macbook Pro) will have 8 CPUs available

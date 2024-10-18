@@ -11,12 +11,11 @@ import numba_helper as nbh
 from line_profiler import LineProfiler
 
 
-
 class DictionaryGeneratorFast():
     # Initialise the class
     def __init__(self, t1Array, t2Array, t2StarArray, noOfIsochromatsX,
                 noOfIsochromatsY, noOfIsochromatsZ, noOfRepetitions, noise, perc, res,
-                multi, inv, CSFnullswitch, sliceProfileSwitch, samples, dictionaryId, sequence, instance):
+                multi, inv, CSFnullswitch, sliceProfileSwitch, samples, dictionaryId, sequence, instance, readTRFA= True, trArray = None, faArray = None):
         """
         Parameters:
         -----------
@@ -56,7 +55,12 @@ class DictionaryGeneratorFast():
             MRF sequence to use
         instance : int
             Instance number for multiple instances of the same code to run
-        
+        readTRFA : bool
+            Whether to read in the TR and FA values from a file or as an input array
+        trArray : numpy nd array, shape (noOfRepetitons,)
+            The TR variation used in the protocol (equal to length to the number of dynamics). Optional input, else it is read from file.
+        faArray : numpy nd array, shape (noOfRepetitons,)
+            The FA variation used in the protocol (equal to length to the number of dynamics). Optional input, else it is read from file.
         """    
         
         # Set the input arguments as class variables
@@ -77,12 +81,10 @@ class DictionaryGeneratorFast():
         self.dictionaryId = dictionaryId
         self.sequence = sequence
         self.instance = instance
-  
         
-
+  
     
         # PARAMETER DECLARATION
-
         
         ### set the rf pulse duration
         ### TO DO: need to allow for variable slice profile and pulse duration
@@ -102,32 +104,10 @@ class DictionaryGeneratorFast():
         self.gradientX = 0 #T/m
         self.gradientY = 0 #T/m
         
-        
 
         ### Set echo time (must be divisible by deltaT) 
         ## TO DO: Need to remove hard coding for TE=2 out of calculation code 
         self.TE = 2 #ms   
-
-        '''
-        SLICE PROFILE ARRAY READ IN
-        '''
-        if sliceProfileSwitch == 1: 
-            sliceProfilePath = '../sliceProfile/sliceProfile.mat'
-            sliceProfileArray = io.loadmat(sliceProfilePath)['sliceProfile']
-            #to give an even sample of the slice profile array 
-            endPoint = np.size(sliceProfileArray, 1)
-            stepSize = (np.size(sliceProfileArray, 1)/2)/(noOfIsochromatsZ)
-            startPoint = (np.size(sliceProfileArray, 1)/2) #stepSize/2 
-            profileSamples = np.arange(startPoint, endPoint, stepSize, dtype=int) #np.round(np.linspace(0+27, np.size(sliceProfileArray,1)-1-27, noOfIsochromatsZ),0)
-            #profileSamples = profileSamples.astype(int)
-            self.sliceProfile = sliceProfileArray[:,profileSamples]
-
-    
-        else: 
-            #If you want flat slice profile then this (i.e. homogenous excitation profile across the slice thickness)
-            self.sliceProfile = np.tile(np.expand_dims(np.round(np.linspace(1,90,90*100),0), axis=1),noOfIsochromatsZ)   
-           
-            
 
         
 
@@ -145,22 +125,54 @@ class DictionaryGeneratorFast():
         self.vecMArrayBlood = np.expand_dims(self.vecMArrayBlood, axis=4)
 
         ### FA array
-        faString = './functions/holdArrays/faArray_' + str(instance) + '.npy'
-        self.faArray = np.load(faString) 
 
-        ### Open and round TR array 
-        trString = './functions/holdArrays/trArray_' + str(instance) + '.npy'
-        trArray = np.load(trString)
-        # Rounding is required in order to assure that TR is divisable by deltaT
-        self.trRound = np.round(trArray, 0)
-        
+        if readTRFA == True:
+            # if the flip angle and repetition time trains are to be read from a file
+            faString = './functions/holdArrays/faArray_' + str(instance) + '.npy'
+            #faString = './functions/holdArrays/faArray_' + str(instance) + '.npy'
+            self.faArray = np.load(faString) 
+
+            ### Open and round TR array 
+            trString = './functions/holdArrays/trArray_' + str(instance) + '.npy'
+            trArray = np.load(trString)
+            # Rounding is required in order to assure that TR is divisable by deltaT
+            self.trRound = np.round(trArray, 0)
+
+        elif readTRFA == False:
+            # if the input TR and FA arrays are used instead of files 
+            self.faArray = faArray
+            self.trRound = np.round(trArray, 0)
+            
         ### Open noise sample array
         self.noiseArray = np.load('./functions/holdArrays/noiseSamples.npy')
 
-
+        # add flag for integer FA here
         
         ### Empty signal array to store all magnitization at all time points 
         self.signal = np.zeros([noOfIsochromatsX, noOfIsochromatsY, noOfIsochromatsZ, 3, noOfRepetitions])
+
+        '''
+        SLICE PROFILE ARRAY READ IN
+        '''
+
+        if sliceProfileSwitch == 1: 
+            # slice profile switch: i.e. if SPGRE or FISP slice profile is used
+            self.sliceProfileType = 'FISP' # global variable to be used later on
+            if self.sliceProfileType == 'FISP':
+                sliceProfilePath = '../sliceProfile/sliceProfileRFFISP.mat' #'../sliceProfile/sliceProfile.mat'
+                sliceProfileArray = io.loadmat(sliceProfilePath)['sliceProfile']
+                self.sliceProfile = self.sampleSliceProfile(sliceProfileArray, sample = 'half') # sample across the isochromats
+
+            elif self.sliceProfileType == 'SPGRE':
+                sliceProfilePath = '../sliceProfile/sliceProfile.mat'
+                sliceProfileArray = io.loadmat(sliceProfilePath)['sliceProfile']
+                self.sliceProfile = self.sampleSliceProfile(sliceProfileArray, sample = 'half') # sample across the isochromats
+
+
+
+        else: 
+            #If you want flat slice profile then this (i.e. homogenous excitation profile across the slice thickness)
+            self.sliceProfile = np.tile(np.expand_dims(np.round(np.linspace(1,90,90*100),0), axis=1),noOfIsochromatsZ)   
 
 
         '''
@@ -179,6 +191,43 @@ class DictionaryGeneratorFast():
         
         return None 
 
+    def sampleSliceProfile(self, fullsliceProfile, sample = 'half'):
+        """
+        Samples half of an symmetrical slice profile according to the number of samples
+        in the z-direction.
+
+        Parameters:
+        -----------
+        fullsliceProfile : numpy nd array, shape (9000, N)
+            Slice profile for angles of 0.1:0.1:90 degrees with N samples
+        
+        sample : str
+            What type of sample of the slice profile  ('half' or 'full')
+           
+
+        Returns:
+        --------
+        sliceProfile : numpy nd array, shape (9000, noOfIsochromatsZ)
+            Sampled slice profile
+            
+        """
+
+        if sample == 'half': # sample half of the profile
+            endPoint = np.size(fullsliceProfile, 1)-1
+            startPoint = (np.size(fullsliceProfile, 1)/2) #stepSize/2 
+            profileSamples = np.linspace(startPoint, endPoint, self.noOfIsochromatsZ, endpoint=True, dtype=int)
+            
+        
+        elif sample == "full": # sample the whole slice profile
+            endPoint = np.size(fullsliceProfile, 1) - 1
+            startPoint = 0
+            profileSamples = np.linspace(startPoint, endPoint, self.noOfIsochromatsZ, dtype=int) 
+        
+        
+        sampledSliceProfile = fullsliceProfile[:,profileSamples]
+        #ßnp.savetxt('sliceProfileUsed.csv', sampledSliceProfile, delimiter=',')
+
+        return sampledSliceProfile
     
     def invpulse(self, loop):
         """
@@ -328,7 +377,11 @@ class DictionaryGeneratorFast():
                 ind = signalDivide.index(int(totalTime/self.deltaT))
                 #Then input the magentization array at that time into the siganl
                 # holder array
-                self.signal[:,0,:,:,ind] = np.squeeze(vecMArray)
+                try:
+                    self.signal[:,0,:,:,ind] = np.squeeze(vecMArray)
+                except:
+
+                    self.signal[:,0,:,:,ind] =  np.expand_dims(np.squeeze(vecMArray), axis=1)
 
             return totalTime    
     
@@ -361,103 +414,50 @@ class DictionaryGeneratorFast():
             Array of magnetization vectors for the blood compartment
         
         """
-        originalFAFISP = False # flag for slice profile of original FISP paper
 
+
+        integerFlip = True # flag for slice profile of original FISP paper select false
+    
         # Flag for integer flip angles
-        if originalFAFISP == False:
+        if integerFlip == True and self.sliceProfileType == 'FISP': 
             faInt = int(self.faArray[loop]*100)
             
             #Extract the flip angle of this loop (degrees)
             if faInt != 0:
                 try: 
                     fa = self.multi*self.sliceProfile[faInt-1,:]
+
                 except: 
                     fa = self.multi*np.ones([self.noOfIsochromatsZ])*180 
                     
             else: 
                 fa = self.multi*np.zeros([self.noOfIsochromatsZ])*180
 
-        if originalFAFISP == True:
+        elif integerFlip == False:
             fa = self.multi*np.ones([self.noOfIsochromatsZ])*(self.faArray[loop])
-                
+
+        elif integerFlip == True:
+            fa = self.multi*np.ones([self.noOfIsochromatsZ])*(self.faArray[loop])
+            fa = fa.astype(int)
+            
         
         #Convert to radians
-        thetaX = ((fa/360)*2*np.pi)  
+        thetaX = np.deg2rad(fa) #((fa/360)*2*np.pi)
+     
         
         rotX = np.zeros([len(thetaX),3,3])
-        """NOTE: rotY is redundant because it is an identity matrix
-        rotY = np.zeros([len(thetaX),3,3])
-        #rotation (pulse) flips spins from aligned with the z-axis to
-        #aligned with the x-axis
-        #Rotates around the x axis  
-        for theta in range(len(thetaX)):
-            rotX[theta,:,:] = np.array([[1, 0, 0], [0, np.cos(thetaX[theta]), np.sin(thetaX[theta])], \
-                            [0, -np.sin(thetaX[theta]), np.cos(thetaX[theta])]])
-            rotY[theta,:,:] = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
-
-        #Combined rotation (in this case same as rotX)
-        vecMRotation = np.matmul(rotY,rotX) 
-
-        """ 
-
-        """
-
-        #rotation (pulse) flips spins from aligned with the z-axis to
-        #aligned with the x-axis
-        #Rotates around the x axis  
-        for theta in range(len(thetaX)):
-            cos_thetaX = np.cos(thetaX[theta])
-            sin_thetaX = np.sin(thetaX[theta])
-            rotX[theta,:,:] = np.array([[1, 0, 0], [0, cos_thetaX, sin_thetaX], \
-                                        [0, -sin_thetaX, cos_thetaX]])
-            
-        """
         sin_thetaX,  cos_thetaX = nbh.sincos(thetaX)
         rotX[:,0, 0] = 1
         rotX[:, 1, 1] = cos_thetaX
         rotX[:, 1, 2] = sin_thetaX
         rotX[:, 2, 1] = -sin_thetaX
-        rotX[:, 2, 2] = cos_thetaX      
-		
-        # Find the remaining magnetisation magnitude and direction for the current TR
-        
-
-        """
-		if self.sequence == 'FISP': 
-            
-            #  Weigel at al, JMR 205(2010)276-285, Eq. 20.
-            
-            
-            rotX[:, 0, 0] = np.cos(thetaX/2)**2
-            rotX[:, 0, 1] = -np.sin(thetaX/2)**2
-            rotX[:, 0, 2] = np.sin(thetaX)
-            rotX[:, 1, 0] = -np.sin(thetaX/2)**2
-            rotX[:, 2, 0] = -0.5* np.sin(thetaX)
-            rotX[:, 1, 1] = np.cos(thetaX/2)**2
-            rotX[:, 1, 2] = np.sin(thetaX)
-            rotX[:, 2, 1] = -0.5*np.sin(thetaX)
-            rotX[:, 2, 2] = np.cos(thetaX)
-            
-            
-            phi = 2.61799 #-np.pi/20
-            rotX[:, 0, 0] = np.cos(thetaX/ 2) ** 2
-            rotX[:, 0, 1] = np.exp(2j * phi) * (np.sin(thetaX / 2)) ** 2
-            rotX[:, 0, 2] = -1j * np.exp(1j * phi) * np.sin(thetaX)
-            rotX[:, 1, 0] = np.exp(-2j * phi) * (np.sin(thetaX / 2)) ** 2
-            rotX[:, 2, 0] = np.cos(thetaX / 2) ** 2
-            rotX[:, 1, 1] = 1j * np.exp(-1j * phi) * np.sin(thetaX)
-            rotX[:, 1, 2] = -1j/2 * np.exp(-1j * phi) * np.sin(thetaX)
-            rotX[:, 2, 1] = 1j/2 * np.exp(1j * phi) * np.sin(thetaX)
-            rotX[:, 2, 2] = np.cos(thetaX)
-            
-
-		"""
-
+        rotX[:, 2, 2] = cos_thetaX    
 
         # Updating the magnetization vector matricies
         #For tissue
         #self.vecMArrayTissue = np.matmul(rotX, self.vecMArrayTissue)
         self.vecMArrayTissue = np.einsum("...ij,...j", rotX, self.vecMArrayTissue[..., 0])[..., None]
+
         #For blood 
         #self.vecMArrayBlood = np.matmul(rotX, self.vecMArrayBlood)
         self.vecMArrayBlood = np.einsum("...ij,...j", rotX, self.vecMArrayBlood[..., 0])[..., None]
@@ -794,10 +794,10 @@ class DictionaryGeneratorFast():
 
         ### Loop over each TR repetitions
         for loop in range(self.noOfRepetitions):
+            
             '''
             WATER EXCHANGE
             '''  
-            np.random.seed(0) # remove later
             # loop time added for each iteration
             repTime = self.trRound[loop]
             #Generate array for storing reseidence time for exchange isochromat
@@ -831,9 +831,9 @@ class DictionaryGeneratorFast():
             reset = (reset < 0)
             reset = reset*1
             timeArray = timeArray * reset 
-
             
-            if self.sequence == 'SPGRE':                              
+            
+            if self.sequence == 'SPGRE':                           
                 ###    RF PULSE
                 #Application of RF pulse modifying the vecM arrays
                 self.rfpulse(loop)
@@ -873,7 +873,7 @@ class DictionaryGeneratorFast():
             
             elif self.sequence == 'FISP':
 
-                HYDRA = False
+                sampling = 'spiral'
                 
                 # Fist, set the T2_star array to equal the T2_array because T2_star isn't
                 # relevant here, and all of the implementation on code relies on T2_star
@@ -883,7 +883,7 @@ class DictionaryGeneratorFast():
                 # Apply the RF pulse for the current FA
                 self.rfpulse(loop)
 
-                if HYDRA == False:
+                if sampling == 'cartesian':
                     # Apply first post-pulse gradient
                     self.gradientX = magnitudeOfGradient
                     self.gradientY = -magnitudeOfGradient
@@ -909,7 +909,7 @@ class DictionaryGeneratorFast():
                     totalTime = self.longTR((self.trRound[loop]-passed), totalTime, signal_flag=False)
 
                
-                if HYDRA == True:
+                if sampling == 'spiral':
                     # The Song (HYDRA2019) FISP
                 
                         # FID after pulse for TE and then sample signal
@@ -923,13 +923,13 @@ class DictionaryGeneratorFast():
                         self.gradientY = magnitudeOfGradient
                         totalTime = self.applied_precession(spoilerTime, totalTime, signal_flag=False)
                 
-
+        
 
         '''
         ADD NOISE 
         '''
         #Randomly select noise samples from existing noise array 
-        noiseSize = np.shape(self.noiseArray)
+        noiseSize = np.shape(self.noiseArray) # sample noise storage array [dynamics, ]
         noiseSamples = np.random.choice(int(noiseSize[0]),[self.noOfRepetitions*self.samples])
         addedNoise = self.noiseArray[noiseSamples,:,:self.noise]
 
@@ -947,28 +947,31 @@ class DictionaryGeneratorFast():
         if self.sequence == 'FISP':
             signalName = 'echo_' + str(self.t1Array[0]) + '_' + str(self.t1Array[1]) + '_'  + str(self.t2Array[0]) + '_'  + str(self.t2Array[1]) + '_'\
             + str(self.res) + '_' + str(self.perc) + '_' + str(self.multi) + '_'
-
+            
         
         #Open noisy signal array
         signalNoisy = np.zeros([self.noOfRepetitions,self.noise])
-
+        # Precompute constants
+        scale_factor = self.noOfIsochromatsX * self.noOfIsochromatsY * self.noOfIsochromatsZ * (1 / (self.noOfIsochromatsX * self.noOfIsochromatsY))
         #For each requested noise level
         for samp in range(self.samples):
-            #Find the magnitude for the Mx and My components for the magnetization
-            # vector and add noise
             try:
                 signalNoisyX = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0))) + 
-                                (self.noOfIsochromatsX*self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))*
-                                np.transpose(addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions* (samp+1),0]))
+                                scale_factor * np.transpose(addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions* (samp+1),0])) # scale factor accounts for the slice profile
                 
                 signalNoisyY = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,1,:], axis=0), axis=0),axis=0)))
-                + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))*np.transpose(
-                    addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions * (samp+1),1]))
-
+                + scale_factor*np.transpose(addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions * (samp+1),1]))
+                
+                if self.sliceProfileType == 'FISP':
+                    signalNoisyX += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,0,:,:],axis=0),axis=0),axis=0))))
+                    signalNoisyY += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,1,:], axis=0), axis=0),axis=0))))
+                
                 #Find the total magitude of M 
                 signalNoisy[:,:] = np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2)
+
                 
             except:
+                
                 signalNoisyX = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0)))
                 + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY)) * (
                     addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions*(samp+1),0]))
@@ -977,13 +980,21 @@ class DictionaryGeneratorFast():
                 + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))* (
                     addedNoise[:,self.noOfRepetitions*samp:self.noOfRepetitions*(samp+1),1]))
                 
+                if self.sliceProfileType == 'FISP':
+                    signalNoisyX += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,0,:,:],axis=0),axis=0),axis=0))))
+                
+                    signalNoisyY += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,1,:], axis=0), axis=0),axis=0))))
+                    
                 #Find the total magitude of M 
                 signalNoisy[:,:] = np.transpose(np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2))
-                
+
+            
+
             #Save signal         
             name = '../dictionaries/Dictionary' + self.dictionaryId +'/' + signalName + str(samp + 1)
             #signalNoisy = signalNoisy/(self.noOfIsochromatsX*self.noOfIsochromatsY*self.noOfIsochromatsZ) # max magnetisation needs to equal 1, right now each
             np.save(name, signalNoisy)
+        
 
 
         return signalNoisy
