@@ -76,10 +76,10 @@ def parameterGeneration():
 
     
      
-     ## FIX ME
-    inv = 1
+
     ## DEFINITION OF VARIATIONS
     
+    """
     # Specify the ranges and step sizes of the dictionary dimensions
     # intravascular water residence time (res) UNIT: ms
     resArray = range(200,1700,100) #range(200,1700,107) #range(200,1700,70) 
@@ -98,16 +98,31 @@ def parameterGeneration():
     if t2tArray[-1] > 112:
         t2tArray= list(t2tArray)
         t2tArray[-1] = 112
+    """
+    resArray = [200] #range(200,1700,107) #range(200,1700,70) 
+    # percentage blood volume (perc) UNIT: %
+    percArray = [0]#[90] #REMEMBER IT WILL BE DIVIDED BY 10 110
+    #T1 of tissue compartment (t1t) UNIT: ms
+    t1tArray = [700,750,800,850,900, 4500] #[1400] #range(700,1700,69) 
+    #T1 of blood compartment (t1b) UNIT: ms
+    t1bArray = [700,750,800,850,900,4500]#[1500] #range(1540,1940,27) 
+    # multiplication factor for the B1 value (multi)
+    multiArray = [100] #100
+    # T2 of tissue compartment UNIT: ms
+    t2tArray = [85]#[68]
+    # T2 of blood compartment UNIT: ms
+    t2bArray = [85] #[165]
+
 
     ## NOISE INFORMATION 
     # number of noise levels
     # for dictionary generation for comparison to experimental data set to one 
-    noise = 9
+    noise = 1
     #The dictionary folder identifier
     #In folder will show as "DictionaryXXX" 
     #This folder needs to already exist or code will not run 
 
-    dictionaryId  = 'FISP_WEX_ISMRM'
+    dictionaryId  = 'FISP_orig'
 
     ## SHAPE OF VARIATIONS
     # TODO: add extra shape variations documentation
@@ -121,13 +136,13 @@ def parameterGeneration():
     #            width of half peak = pi*b 
     #       gaps: same as sinusoidal but with user specifed sections of zero FA 
     #             without editing gaps will be after every 250 FAs (can be edited below)
-    caseFA = 'FISP' #'sin' #'random'  #'gaps' 'FISP' 'FISPorig'
+    caseFA = 'FISPorig' #'sin' #'random'  #'gaps' 'FISP' 'FISPorig'
     b1sens= True # changes the shape of the FA train; instead of Jiang et al. variation, it becomes the variation from doi: 10.1002/mrm.26009
 
     # For repetition time [ms]: 
     #       random: random variation in FA between two values: d and e
     #       sin: sinusoidal variation with min TR = d, max TR = 2*e+d, period = 2*pi*c
-    caseTR = 'sin' # #'sin' #'random' 'perlin' for FISP use last
+    caseTR = 'perlin' # #'sin' #'random' 'perlin' for original FISP use last
     
     #states = [8.77345817, 147.49943504, 398.3546085, 5.81103981, 17.98150172]
     #a= states[0]; b = states[1]; c = states[2];  d = states[3]; e = states[4]
@@ -141,7 +156,7 @@ def parameterGeneration():
     if caseFA == 'tester':
         faArray = [90]
 
-    CSFnullswitch = True
+    CSFnullswitch = False
 
     #a = 13; b = 40; c =181; d = 100; e = 45 SPGRE
 
@@ -149,6 +164,9 @@ def parameterGeneration():
     
     ##  DEFINING FA ARRAY
     
+    ## FIX ME
+    inv = 1
+
     if caseFA == 'sin':
         #Generate linearly spaced array between 0 and the number repetitions 
         xRange = np.array(range(noOfRepetitions))
@@ -168,7 +186,9 @@ def parameterGeneration():
         # actual original fisp paper values
         faArray = np.genfromtxt('fa_jiang', delimiter=',', dtype=float) 
         if inv == 1:
-            faArray[0] = 180
+            #faArray[0] = 180
+            faArray = np.insert(faArray,0,180)
+
 
     if caseFA == 'FISP':
         """
@@ -259,8 +279,8 @@ def parameterGeneration():
         """
         # https://onlinelibrary.wiley.com/doi/10.1002/mrm.25559 Perlin Noise
         trArray = np.genfromtxt('tr_jiang', delimiter=',', dtype=float) 
-        if CSFnullswitch == True: 
-            trArray[0] = 2909
+        if inv == 1:
+            trArray = np.insert(trArray,0,40)
     
     elif caseTR =='cao':
         trArray = np.load('tr_cao.npy') 
@@ -306,15 +326,15 @@ def simulationFunction(paramArray):
     sys.path.insert(0, "./functions/")
     from DictionaryGeneratorFast import DictionaryGeneratorFast
     
-    #Is there an inversion pulse
-    invSwitch = False
+    #Is there an inversion pulse, THIS NEEDS REMOVING IT DOES NOTHING
+    invSwitch = True
     # Is slice profile accounted for
-    sliceProfileSwitch = True
+    sliceProfileSwitch = 0
     #Null CSF using inversion
-    CSFnullswitch = False
+    CSFnullswitch = True
     # Number of noise samples generated 
     # Set to one for dictionary gneeration 
-    samples = 50
+    samples = 1
     
     parameters = tuple(paramArray)
 

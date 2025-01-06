@@ -81,6 +81,7 @@ class DictionaryGeneratorFast():
         self.dictionaryId = dictionaryId
         self.sequence = sequence
         self.instance = instance
+        self.sliceProfileSwitch = sliceProfileSwitch
         
   
     
@@ -108,6 +109,9 @@ class DictionaryGeneratorFast():
         ### Set echo time (must be divisible by deltaT) 
         ## TO DO: Need to remove hard coding for TE=2 out of calculation code 
         self.TE = 2 #ms   
+
+        # Flag for returning complex or magnitude fingerprint
+        self.complexFing = True
 
         
 
@@ -155,7 +159,9 @@ class DictionaryGeneratorFast():
         SLICE PROFILE ARRAY READ IN
         '''
 
-        if sliceProfileSwitch == 1: 
+        
+
+        if self.sliceProfileSwitch == 1: 
             # slice profile switch: i.e. if SPGRE or FISP slice profile is used
             self.sliceProfileType = 'FISP' # global variable to be used later on
             if self.sliceProfileType == 'FISP':
@@ -170,10 +176,10 @@ class DictionaryGeneratorFast():
 
 
 
-        else: 
+        elif self.sliceProfileSwitch == 0: 
             #If you want flat slice profile then this (i.e. homogenous excitation profile across the slice thickness)
             self.sliceProfile = np.tile(np.expand_dims(np.round(np.linspace(1,90,90*100),0), axis=1),noOfIsochromatsZ)   
-
+            #self.sliceProfileType = 'FISP'
 
         '''
         PEAK LOCATIONS
@@ -231,6 +237,7 @@ class DictionaryGeneratorFast():
     
     def invpulse(self, loop):
         """
+        
         Application of an inversion pulse to a Bloch equation simulation with two compartments
 
         Parameters:
@@ -418,6 +425,7 @@ class DictionaryGeneratorFast():
 
         integerFlip = True # flag for slice profile of original FISP paper select false
     
+        
         # Flag for integer flip angles
         if integerFlip == True and self.sliceProfileType == 'FISP': 
             faInt = int(self.faArray[loop]*100)
@@ -433,10 +441,11 @@ class DictionaryGeneratorFast():
             else: 
                 fa = self.multi*np.zeros([self.noOfIsochromatsZ])*180
 
-        elif integerFlip == False:
+        elif self.sliceProfileSwitch == 0 and integerFlip == False:
             fa = self.multi*np.ones([self.noOfIsochromatsZ])*(self.faArray[loop])
 
-        elif integerFlip == True:
+
+        elif self.sliceProfileSwitch == 0 and integerFlip == True:
             fa = self.multi*np.ones([self.noOfIsochromatsZ])*(self.faArray[loop])
             fa = fa.astype(int)
             
@@ -453,7 +462,7 @@ class DictionaryGeneratorFast():
         rotX[:, 2, 1] = -sin_thetaX
         rotX[:, 2, 2] = cos_thetaX    
 
-        # Updating the magnetization vector matricies
+        # Updating the magnetization vector matrices
         #For tissue
         #self.vecMArrayTissue = np.matmul(rotX, self.vecMArrayTissue)
         self.vecMArrayTissue = np.einsum("...ij,...j", rotX, self.vecMArrayTissue[..., 0])[..., None]
@@ -562,8 +571,6 @@ class DictionaryGeneratorFast():
         
         
         # compute the trigonometric functions for the rotation matrices
-        #cos_omega_deltaT = np.cos(omegaArray)
-        #sin_omega_deltaT = np.sin(omegaArray)
         sin_omega_deltaT, cos_omega_deltaT = nbh.sincos(omegaArray)
         precession[:,:,:,0,0] = cos_omega_deltaT
         precession[:,:,:,0,1] = -sin_omega_deltaT
@@ -752,6 +759,8 @@ class DictionaryGeneratorFast():
             INVERSION RECOVERY
         '''
         
+        # THIS IS REDUNDANT, IT IS IN THE FA TRAIN
+        """
         ### Include an inversion recovery pulse to null CSF :'0' - No, '1' - 'Yes'      
         if self.inv == 1 and self.CSF_null == True:
 
@@ -767,6 +776,8 @@ class DictionaryGeneratorFast():
             # MRF patch does not allow for multiple TI values so use mean TR to
             # calcualte the TI
             tNull = 2909 #int(t1CSF*0.69) #np.log(2)-np.log(1-np.exp(-np.mean(trRound)/t1CSF)))
+
+            THE ABOVE IS INCORRECT, should have TI = T1ln2 from Bernstein
         
             #Application of inversion pulse 
             self.invpulse(loop=0)
@@ -780,10 +791,11 @@ class DictionaryGeneratorFast():
             timeChuck = self.longTR(int(tNull), totalTime)
 
         elif self.inv ==1 and self.sequence == 'FISP' and self.CSF_null == False:
+            print('inverted')
             self.invpulse(loop=0)
             inv_time = 20
             timeChuck = self.longTR(inv_time, totalTime)
-
+        """
             
             
         '''
@@ -949,45 +961,95 @@ class DictionaryGeneratorFast():
             + str(self.res) + '_' + str(self.perc) + '_' + str(self.multi) + '_'
             
         
-        #Open noisy signal array
-        signalNoisy = np.zeros([self.noOfRepetitions,self.noise])
+        #Open noisy signal array, dependent if complex or magnitude data is sought after
+        if self.complexFing == False:
+            signalNoisy = np.zeros([self.noOfRepetitions,self.noise])
+        elif self.complexFing == True:
+            signalNoisy = np.zeros([self.noOfRepetitions,self.noise,2])
+
         # Precompute constants
         scale_factor = self.noOfIsochromatsX * self.noOfIsochromatsY * self.noOfIsochromatsZ * (1 / (self.noOfIsochromatsX * self.noOfIsochromatsY))
         #For each requested noise level
         for samp in range(self.samples):
-            try:
-                signalNoisyX = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0))) + 
-                                scale_factor * np.transpose(addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions* (samp+1),0])) # scale factor accounts for the slice profile
-                
-                signalNoisyY = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,1,:], axis=0), axis=0),axis=0)))
-                + scale_factor*np.transpose(addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions * (samp+1),1]))
-                
-                if self.sliceProfileType == 'FISP':
-                    signalNoisyX += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,0,:,:],axis=0),axis=0),axis=0))))
-                    signalNoisyY += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,1,:], axis=0), axis=0),axis=0))))
-                
-                #Find the total magitude of M 
-                signalNoisy[:,:] = np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2)
-
-                
-            except:
-                
-                signalNoisyX = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0)))
-                + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY)) * (
-                    addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions*(samp+1),0]))
-                
-                signalNoisyY = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,1,:], axis=0), axis=0),axis=0))) 
-                + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))* (
-                    addedNoise[:,self.noOfRepetitions*samp:self.noOfRepetitions*(samp+1),1]))
-                
-                if self.sliceProfileType == 'FISP':
-                    signalNoisyX += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,0,:,:],axis=0),axis=0),axis=0))))
-                
-                    signalNoisyY += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,1,:], axis=0), axis=0),axis=0))))
+            if self.sliceProfileSwitch == 1:
+                try:
+                    signalNoisyX = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0))) + 
+                                    scale_factor * np.transpose(addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions* (samp+1),0])) # scale factor accounts for the slice profile
                     
-                #Find the total magitude of M 
-                signalNoisy[:,:] = np.transpose(np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2))
+                    signalNoisyY = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,1,:], axis=0), axis=0),axis=0)))
+                    + scale_factor*np.transpose(addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions * (samp+1),1]))
+                    
+                    if self.sliceProfileType == 'FISP':
+                        signalNoisyX += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,0,:,:],axis=0),axis=0),axis=0))))
+                        signalNoisyY += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,1,:], axis=0), axis=0),axis=0))))
+                    
+                    if self.complexFing == False:
+                        #Find the total magitude of M 
+                        signalNoisy[:,:] = np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2)
+                    elif self.complexFing == True:
+                        # return the complex signal
+                        signalNoisy[:,:,0] = signalNoisyX
+                        signalNoisy[:,:,1] = signalNoisyY
 
+                except:
+                    
+                    signalNoisyX = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0)))
+                    + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY)) * (
+                        addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions*(samp+1),0]))
+                    
+                    signalNoisyY = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,1,:], axis=0), axis=0),axis=0))) 
+                    + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))* (
+                        addedNoise[:,self.noOfRepetitions*samp:self.noOfRepetitions*(samp+1),1]))
+                    
+                    if self.sliceProfileType == 'FISP':
+                        signalNoisyX += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,0,:,:],axis=0),axis=0),axis=0))))
+                    
+                        signalNoisyY += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,1,:], axis=0), axis=0),axis=0))))
+                    
+                    if self.complexFing == False:
+                        #Find the total magitude of M 
+                        signalNoisy[:,:] = np.transpose(np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2))
+                    elif self.complexFing == True:
+                        # return the complex signal
+                        signalNoisy[:,:,0] = np.transpose(signalNoisyX)
+                        signalNoisy[:,:,1] = np.transpose(signalNoisyY)
+
+            
+            elif self.sliceProfileSwitch == 0:
+                try:
+                    signalNoisyX = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0))) + 
+                                    (self.noOfIsochromatsX*self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))*
+                                    np.transpose(addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions* (samp+1),0]))
+                    
+                    signalNoisyY = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,1,:], axis=0), axis=0),axis=0)))
+                    + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))*np.transpose(
+                        addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions * (samp+1),1]))
+
+                    if self.complexFing == False:
+                        #Find the total magitude of M 
+                        signalNoisy[:,:] = np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2)
+                    elif self.complexFing == True:
+                        # return the complex signal
+                        signalNoisy[:,:,0] = signalNoisyX
+                        signalNoisy[:,:,1] = signalNoisyY
+                
+                except:
+                    signalNoisyX = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0)))
+                    + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY)) * (
+                        addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions*(samp+1),0]))
+                    
+                    signalNoisyY = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,1,:], axis=0), axis=0),axis=0))) 
+                    + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))* (
+                        addedNoise[:,self.noOfRepetitions*samp:self.noOfRepetitions*(samp+1),1]))
+                    
+                    #Find the total magitude of M 
+                    if self.complexFing == False:
+                        #Find the total magitude of M 
+                        signalNoisy[:,:] = np.transpose(np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2))
+                    elif self.complexFing == True:
+                        # return the complex signal
+                        signalNoisy[:,:,0] = np.transpose(signalNoisyX)
+                        signalNoisy[:,:,1] = np.transpose(signalNoisyY)
             
 
             #Save signal         
