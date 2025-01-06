@@ -9,15 +9,15 @@ import sys
 
 """ TR variation Options"""
 
-def sinusoidal_TR(TRmax, TRmin, freq, N, instance, CSFnullswitch = True, save = True):
+def sinusoidal_TR(TRmax, TRmin, freq, N, instance, CSFNullSwitch = True, save = True):
     
     N_arr = np.linspace(0,N,num=N)
     #trArray = (TRmax*np.sin(N_arr/freq)+(TRmax+TRmin))
     trArray = 0.5*((TRmax-TRmin)*np.sin(N_arr*freq/2*np.pi)+(TRmax+TRmin))
-
-    if CSFnullswitch == True:
-        trArray[0] = 2909
-
+    if CSFNullSwitch == True:
+        #trArray = np.insert(trArray,0,40)# empirical value to match the original FISP paper. with no CSF nulling
+        T1CSF = 4658.3 # mean value from Bojorquez et al. MRI, 2017
+        trArray = np.insert(trArray,0,T1CSF*np.log(2)) # there is no pulse before the TI, so use EQ 14. from Bernstein book
     if save == True:
      #Save array for calling in the main function later
         np.save('./functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
@@ -49,7 +49,7 @@ def sinusoidal_FA(a_max, N, w_a, instance, invSwitch = True, save = True):
     return faArray
 
 
-def FISP_FA(peaks, N, instance, invSwitch = True, save = True):
+def FISP_FA(peaks, N, instance, invSwitch = True, save = True, b1Sensitivity = True):
 
     # variation from Jiang Paper. Peaks = 1 x 5 input indicating the peaks of the variation
     
@@ -59,20 +59,27 @@ def FISP_FA(peaks, N, instance, invSwitch = True, save = True):
     min_angle = 5 # minimum flip angle
     peaks = peaks - min_angle
 
+    if b1Sensitivity == True:
+        peaks = np.concatenate((peaks, np.zeros(1))) # pad zero so code doesn't break (i.e. must coincide peaks with cycles)
+
     for i in range(int(cycles)):
-        # Current segment maximum flip angle
-        maxFA_i = peaks[i]
-        # Iterate through the segment
-        for j in range(1,Nrf):
-            # Calculate the flip angle
-            flipAngle = np.sin(j*np.pi/Nrf)*maxFA_i
-            # Append the flip angle to the array
-            faArray.append(flipAngle+min_angle)
-        faArray += [0,0,0,0,0,0,0,0,0,0] # add recovery time between cycles
+        if b1Sensitivity == True and i == int(cycles)-1: # if we are at the last cycle need to add B1 variation
+            faArray += ((np.tile(np.concatenate((np.ones(15)*90, np.zeros(15))),7)).tolist())  
+        else: 
+            # Current segment maximum flip angle
+            maxFA_i = peaks[i]
+            # Iterate through the segment
+            for j in range(1,Nrf):
+                # Calculate the flip angle
+                flipAngle = np.sin(j*np.pi/Nrf)*maxFA_i
+                # Append the flip angle to the array
+                faArray.append(flipAngle+min_angle)
+            faArray += [0,0,0,0,0,0,0,0,0,0] # add recovery time between cycles
+   
     faArray = faArray[:N]
     
     if invSwitch == True: # if an initial inversion is desired
-        faArray[0] = 180
+        faArray = np.insert(faArray,0,180)
 
     #Save array for calling in the main function later
     if save == True:
