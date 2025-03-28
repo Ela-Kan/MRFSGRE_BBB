@@ -29,10 +29,10 @@ warnings.filterwarnings("ignore")
 
 
 ''' -----------------------------INPUTS--------------------------------- '''
-acqlen = 1000
+acqlen = 2000
 
 # Dictionary folder
-dictfolder = 'FISP_WEX_ISMRM'
+dictfolder = 'UpgradeFISPNoB1'
 
 #Type of normalisation performed 
 #Set to L2-norm (standard)
@@ -55,6 +55,8 @@ t1tArray = range(1000,2200,200) #range(700,1700,69)
 t1bArray = range(1500,2100,200) #range(1540,1940,27) 
 # multiplication factor for the B1 value (multi)
 multiArray = range(80, 130, 10) #100
+
+
 # T2 of tissue compartment UNIT: ms
 t2tArray = range(38,127,15)
 # T2 of blood compartment UNIT: ms
@@ -62,10 +64,14 @@ t2bArray = range(55, 385, 110)
 if t2tArray[-1] > 112:
     t2tArray= list(t2tArray)
     t2tArray[-1] = 112
+
 if percArray[-1] > 100:
     percArray= list(percArray)
     percArray[-1] = 100
-params = list(itertools.product(t1tArray, t1bArray, t2tArray, t2bArray, resArray, percArray, multiArray))
+params = list(itertools.product(t1tArray, t1bArray, t2tArray, t2bArray, resArray, percArray, multiArray)) # FISP
+#params = list(itertools.product(t1tArray, t1bArray, resArray, percArray, multiArray)) # SPGRE
+
+
 # find mean T1 tissue and T1 blood
 t1tmean = np.mean(t1tArray)
 t1bmean = np.mean(t1bArray)
@@ -81,6 +87,7 @@ filtered_combinations = [
 ##########################
 
 #no_entries = np.size( [f for f in os.listdir(dictPath) if f.endswith('.npy')])
+#filtered_combinations = params # SPGRE ONLY, DELETE IF FISP
 no_entries = len(filtered_combinations)
 
 
@@ -96,7 +103,8 @@ convert_to_mag = True # whether to convert to a magnitude signal from complex
 #Loading all dictionary signals into array    
 #for filename in glob.glob(os.path.join(str(dictPath + rr))):
 for param in filtered_combinations:
-    filename = f'../dictionaries/DictionaryFISP_WEX_ISMRM/echo_{param[0]}_{param[1]}_{param[2]}_{param[3]}_{param[4]}_{param[5]/10}_{param[6]/100}_1.npy'
+    filename = f'../dictionaries/DictionaryUpgradeFISPNoB1/echo_{param[0]}_{param[1]}_{param[2]}_{param[3]}_{param[4]}_{param[5]/10}_{param[6]/100}_1.npy' #FISP
+    #filename = f'../dictionaries/DictionarySPGRE_WEX_upgrade/echo_{float(param[0])}_{float(param[1])}_{float(param[2])}_{param[3]/10}_{param[4]/100}_1.npy' # SPGRE
     print(f"Processing file: {count+1}")
     with open(os.path.join(filename), 'r') as f:
         #No water exchange variation considered
@@ -115,12 +123,25 @@ for param in filtered_combinations:
                 array[:,count] = np.squeeze(hold[0:acqlen,0]) 
             else:
                 array[:,count] = hold[0:acqlen]
+                #Save parameter values  (Look up table)
+                strsplit = filename.split('_')  
+                print(strsplit)
+                files.append([float(strsplit[1]),float(strsplit[2]), # change this depending on the file structure (print the filename to see what it looks like)
+                                float(strsplit[3]),float(strsplit[4]),
+                                float(strsplit[5]), float(strsplit[6]), float(strsplit[7])])
+                count += 1
+
+            """# BELOW FOR SPGRE
+            array[:,count] = hold[0:acqlen]
+
             #Save parameter values  (Look up table)
             strsplit = filename.split('_')  
-            files.append([float(strsplit[3]),float(strsplit[4]), # change this depending on the file structure (print the filename to see what it looks like)
-                            float(strsplit[5]),float(strsplit[6]),
-                            float(strsplit[7]), float(strsplit[8]), float(strsplit[9])])
-            count += 1
+            print(strsplit)
+            files.append([float(strsplit[3]),float(strsplit[4]),
+                              float(strsplit[5]),float(strsplit[6]),
+                              float(strsplit[7])])
+            count += 1    
+            """
         except: 
             #Skip if it doesnt work 
             fff = 2

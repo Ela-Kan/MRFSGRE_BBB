@@ -10,7 +10,6 @@ from scipy import signal, io
 import numba_helper as nbh
 from line_profiler import LineProfiler
 
-
 class DictionaryGeneratorFast():
     # Initialise the class
     def __init__(self, t1Array, t2Array, t2StarArray, noOfIsochromatsX,
@@ -99,7 +98,7 @@ class DictionaryGeneratorFast():
 
         
         ### Time increment
-        self.deltaT = 1 #1ms
+        self.deltaT = 1 #1ms dt
 
         #Initially gradient is 0 (while pulse is on)
         self.gradientX = 0 #T/m
@@ -111,7 +110,7 @@ class DictionaryGeneratorFast():
         self.TE = 2 #ms   
 
         # Flag for returning complex or magnitude fingerprint
-        self.complexFing = True
+        self.complexFing = False
 
         
 
@@ -162,24 +161,28 @@ class DictionaryGeneratorFast():
         
 
         if self.sliceProfileSwitch == 1: 
-            # slice profile switch: i.e. if SPGRE or FISP slice profile is used
-            self.sliceProfileType = 'FISP' # global variable to be used later on
-            if self.sliceProfileType == 'FISP':
+            # slice profile switch: i.e. if SPGRE or FISP slice profile is used, set the type
+            if self.sequence == 'FISP':
                 sliceProfilePath = '../sliceProfile/sliceProfileRFFISP.mat' #'../sliceProfile/sliceProfile.mat'
+                self.sliceProfileType = 'FISP' # global variable to be used later on
                 sliceProfileArray = io.loadmat(sliceProfilePath)['sliceProfile']
                 self.sliceProfile = self.sampleSliceProfile(sliceProfileArray, sample = 'half') # sample across the isochromats
 
-            elif self.sliceProfileType == 'SPGRE':
-                sliceProfilePath = '../sliceProfile/sliceProfile.mat'
+            elif self.sequence == 'SPGRE':
+                self.sliceProfileType = 'SPGRE' 
+                sliceProfilePath = '../sliceProfile/sliceProfileRFSPGRE.mat'
                 sliceProfileArray = io.loadmat(sliceProfilePath)['sliceProfile']
                 self.sliceProfile = self.sampleSliceProfile(sliceProfileArray, sample = 'half') # sample across the isochromats
 
+                # Emma's implementation:
+                #sliceProfileArray = io.loadmat(sliceProfilePath)['sliceProfile']
+                #self.sliceProfile = self.sampleSliceProfile(sliceProfileArray, sample = 'half') # sample across the isochromats
 
 
         elif self.sliceProfileSwitch == 0: 
             #If you want flat slice profile then this (i.e. homogenous excitation profile across the slice thickness)
             self.sliceProfile = np.tile(np.expand_dims(np.round(np.linspace(1,90,90*100),0), axis=1),noOfIsochromatsZ)   
-            #self.sliceProfileType = 'FISP'
+            self.sliceProfileType = 'FISP' # arbitrary so the code continues to work
 
         '''
         PEAK LOCATIONS
@@ -387,8 +390,10 @@ class DictionaryGeneratorFast():
                 try:
                     self.signal[:,0,:,:,ind] = np.squeeze(vecMArray)
                 except:
-
                     self.signal[:,0,:,:,ind] =  np.expand_dims(np.squeeze(vecMArray), axis=1)
+                
+                #print(f"totalTime: {totalTime}, signalDivide: {self.signalDivide[ind]}")
+
 
             return totalTime    
     
@@ -423,11 +428,11 @@ class DictionaryGeneratorFast():
         """
 
 
-        integerFlip = True # flag for slice profile of original FISP paper select false
+        integerFlip = False # flag for slice profile of original FISP paper select false
     
         
         # Flag for integer flip angles
-        if integerFlip == True and self.sliceProfileType == 'FISP': 
+        if integerFlip == True and (self.sliceProfileType == 'FISP' or self.sliceProfileType == 'SPGRE'): # for my slice profile correction
             faInt = int(self.faArray[loop]*100)
             
             #Extract the flip angle of this loop (degrees)
@@ -452,6 +457,7 @@ class DictionaryGeneratorFast():
         
         #Convert to radians
         thetaX = np.deg2rad(fa) #((fa/360)*2*np.pi)
+        print(fa)
      
         
         rotX = np.zeros([len(thetaX),3,3])
@@ -494,7 +500,6 @@ class DictionaryGeneratorFast():
             Array of magnetization vectors for the blood compartment
 
         """
-
         #Using the rf phase formula developed by Zur et al (1991)
         # calculate the phase change for this particular repetition
         alpha0 = (123/360)*2*np.pi
@@ -516,7 +521,7 @@ class DictionaryGeneratorFast():
         rotY = np.array([[np.cos(thetaZ), -np.sin(thetaZ), 0],\
                             [np.sin(thetaZ), np.cos(thetaZ), 0],\
                             [0, 0, 1]])
-       
+    
             
         # Updating the magnetization vector matricies
         #For tissue
@@ -526,6 +531,7 @@ class DictionaryGeneratorFast():
         #self.vecMArrayBlood = np.matmul(vecMIsochromatHold,self.vecMArrayBlood)
         self.vecMArrayBlood = np.einsum("...ij,...j", rotY, self.vecMArrayBlood[..., 0])[..., None]
 
+        
         return None
     
     def rotation_calculations(self):
@@ -562,7 +568,7 @@ class DictionaryGeneratorFast():
         gradientMatrix += self.gradientY*self.positionArrayY
 
          # Gyromagnetic ratio for proton 42.6 MHz/T
-        omegaArray = np.repeat(np.expand_dims((42.6)*gradientMatrix, axis=2), self.noOfIsochromatsZ, axis=2) * self.deltaT
+        omegaArray = np.repeat(np.expand_dims((42.576)*gradientMatrix, axis=2), self.noOfIsochromatsZ, axis=2) * self.deltaT
 
         #for the precessions generate an array storing the 3x3 rotation matrix 
         #for each isochromat
@@ -579,7 +585,7 @@ class DictionaryGeneratorFast():
 
         return precession
     
-    def applied_precession(self, gradientDuration, totalTime, signal_flag = True):
+    def applied_precession(self, gradientDuration, totalTime, signal_flag = True, saveMxMy =False, mxy_history_tissue=None, mxy_history_blood=None, current_tr_index=0):
         """
         Calculation of the precession of isochormats during the application of gradients
         for a two compartment model. Relaxation is considered.
@@ -651,6 +657,7 @@ class DictionaryGeneratorFast():
         precessionBlood = precession[:np.size(self.vecMArrayBlood,0),:, :, :]
         precessionTissue = precession[np.size(self.vecMArrayBlood,0):,:, :, :]
 
+
         # Pre calculate the exponential multipliers
         #For the tissue compartment
         #Set the relavent T1 and T2*
@@ -668,17 +675,27 @@ class DictionaryGeneratorFast():
         exp_delta_t_t1_blood = (np.exp(-self.deltaT/t1))
         one_minus_exp_delta_t_t1_blood = (1-np.exp(-self.deltaT/t1))
         
+        tStep_i = 0 # index to save Mxy for debugging
 
         #For each time step
         for tStep in range(int(gradientDuration/self.deltaT)):
             
                 #Update time passed
                 totalTime = totalTime + self.deltaT
-        
+
+                if saveMxMy == True:
+                    # Calculate Mxy magnitude (example: average over isochromats - adjust as needed)
+                    mxy_mag_tissue = np.mean(np.sqrt(self.vecMArrayTissue[:,:,:,0,:]**2 + self.vecMArrayTissue[:,:,:,1,:]**2))
+                    mxy_mag_blood = np.mean(np.sqrt(self.vecMArrayBlood[:,:,:,0,:]**2 + self.vecMArrayBlood[:,:,:,1,:]**2))
+                    # Store in history arrays
+                    mxy_history_tissue[current_tr_index, tStep_i] = mxy_mag_tissue
+                    mxy_history_blood[current_tr_index, tStep_i] = mxy_mag_blood
+                    tStep_i += 1 # Increment time step index
                 
                 #Multiply by the precession rotation matrix (incremental for each deltaT)
                 #vecMIsochromat = np.matmul(precessionTissue, self.vecMArrayTissue)
                 vecMIsochromat = np.einsum("...ij,...j", precessionTissue, self.vecMArrayTissue[..., 0])[..., None]
+                
                 
                 
                 # The magnitude change due to relaxation is then applied to each
@@ -717,7 +734,12 @@ class DictionaryGeneratorFast():
                     ind = signalDivide.index(int(totalTime/self.deltaT))
                     #Then input the magentization array at that time into the siganl
                     # holder array
-                    self.signal[:,0,:,:,ind] = np.squeeze(vecMArray)
+                    try:
+                        self.signal[:,0,:,:,ind] = np.squeeze(vecMArray)
+                    except:
+                        self.signal[:,0,:,:,ind] = np.expand_dims(np.squeeze(vecMArray), axis=1)
+
+                    #print(f"totalTime: {totalTime}, signalDivide: {self.signalDivide[ind]}")
                 
 
         return totalTime
@@ -746,7 +768,7 @@ class DictionaryGeneratorFast():
     
         """Gradient parameters"""
         # Maximum gradient height
-        magnitudeOfGradient  = -(2e-3)*np.pi #UNIT: T/m
+        magnitudeOfGradient  =-6e-3 #5.49e-3 FISP PAPER # FISP gradient: -(2e-3)*np.pi , SPGRE: -6e-3 #UNIT: T/m
 
         ### Set the duration of the gradients applied to have the echo peak occur at TE
         firstGradientDuration = self.TE/2
@@ -845,14 +867,16 @@ class DictionaryGeneratorFast():
             timeArray = timeArray * reset 
             
             
-            if self.sequence == 'SPGRE':                           
+            if self.sequence == 'SPGRE':           
+                perfect_spoil = False                
                 ###    RF PULSE
                 #Application of RF pulse modifying the vecM arrays
                 self.rfpulse(loop)
                 
                 ### RF SPOILING 
                 #Application of the rf spoiling modifying the vecM arrays
-                self.rf_spoil(loop)
+                if perfect_spoil == False:
+                    self.rf_spoil(loop)
                 
                 #Apply first gradient lobe (to the edge of k-space)
                 self.gradientX = -magnitudeOfGradient
@@ -870,7 +894,16 @@ class DictionaryGeneratorFast():
                 ## SECOND GRADIENT - DOUBLE LENGTH
                 #Precession occuring during gradient application 
                 #Accounts for relaxation and applies precession to the vecM
-                totalTime = self.applied_precession(secondGradientDuration, totalTime)
+                saveMxMy = True
+                if saveMxMy == False or loop > 10:
+                    totalTime = self.applied_precession(secondGradientDuration, totalTime)
+                elif saveMxMy == True:
+                    if loop == 0:
+                        mxy_history_tissue = np.zeros([10, int(secondGradientDuration/self.deltaT)])
+                        mxy_history_blood = np.zeros([10, int(secondGradientDuration/self.deltaT)])
+                    while loop <= 10:
+                        totalTime = self.applied_precession(secondGradientDuration, totalTime, saveMxMy, mxy_history_tissue, mxy_history_blood, loop)
+       
                 
                 
                 # Calculate time passed
@@ -882,7 +915,14 @@ class DictionaryGeneratorFast():
             
                 # Allow remaining TR time
                 totalTime = self.longTR((self.trRound[loop]-passed), totalTime)
-            
+
+                if perfect_spoil == True: # to debug
+                # PERFECT SPOILING: Set Mxy components to zero
+                    self.vecMArrayTissue[:,:,:,0,:] = 0  # Set Mx to zero for tissue
+                    self.vecMArrayTissue[:,:,:,1,:] = 0  # Set My to zero for tissue
+                    self.vecMArrayBlood[:,:,:,0,:] = 0   # Set Mx to zero for blood
+                    self.vecMArrayBlood[:,:,:,1,:] = 0   # Set My to zero for blood
+                
             elif self.sequence == 'FISP':
 
                 sampling = 'spiral'
@@ -929,7 +969,7 @@ class DictionaryGeneratorFast():
 
                         # Allow relaxation and unbalanced 'spoiler gradient' 
                         passed = self.TE + self.pulseDuration
-                        spoilerTime = self.TE/2
+                        spoilerTime = self.TE/2 #self.TE/2
                         totalTime = self.longTR(self.trRound[loop]-passed-spoilerTime, totalTime, signal_flag = False)
                         self.gradientX = -magnitudeOfGradient
                         self.gradientY = magnitudeOfGradient
@@ -965,7 +1005,7 @@ class DictionaryGeneratorFast():
         if self.complexFing == False:
             signalNoisy = np.zeros([self.noOfRepetitions,self.noise])
         elif self.complexFing == True:
-            signalNoisy = np.zeros([self.noOfRepetitions,self.noise,2])
+            signalNoisy = np.zeros([self.noOfRepetitions,2])
 
         # Precompute constants
         scale_factor = self.noOfIsochromatsX * self.noOfIsochromatsY * self.noOfIsochromatsZ * (1 / (self.noOfIsochromatsX * self.noOfIsochromatsY))
@@ -979,7 +1019,7 @@ class DictionaryGeneratorFast():
                     signalNoisyY = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,1,:], axis=0), axis=0),axis=0)))
                     + scale_factor*np.transpose(addedNoise[:,self.noOfRepetitions * samp:self.noOfRepetitions * (samp+1),1]))
                     
-                    if self.sliceProfileType == 'FISP':
+                    if self.sliceProfileType == 'FISP' or self.sliceProfileType == 'SPGRE': # my slice profile
                         signalNoisyX += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,0,:,:],axis=0),axis=0),axis=0))))
                         signalNoisyY += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,1,:], axis=0), axis=0),axis=0))))
                     
@@ -988,8 +1028,8 @@ class DictionaryGeneratorFast():
                         signalNoisy[:,:] = np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2)
                     elif self.complexFing == True:
                         # return the complex signal
-                        signalNoisy[:,:,0] = signalNoisyX
-                        signalNoisy[:,:,1] = signalNoisyY
+                        signalNoisy[:,0] = np.squeeze(signalNoisyX)
+                        signalNoisy[:,1] = np.squeeze(signalNoisyY)
 
                 except:
                     
@@ -1001,7 +1041,7 @@ class DictionaryGeneratorFast():
                     + (self.noOfIsochromatsX * self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))* (
                         addedNoise[:,self.noOfRepetitions*samp:self.noOfRepetitions*(samp+1),1]))
                     
-                    if self.sliceProfileType == 'FISP':
+                    if self.sliceProfileType == 'FISP' or self.sliceProfileType == 'SPGRE': # my slice profile:
                         signalNoisyX += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,0,:,:],axis=0),axis=0),axis=0))))
                     
                         signalNoisyY += (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,1:,1,:], axis=0), axis=0),axis=0))))
@@ -1011,8 +1051,8 @@ class DictionaryGeneratorFast():
                         signalNoisy[:,:] = np.transpose(np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2))
                     elif self.complexFing == True:
                         # return the complex signal
-                        signalNoisy[:,:,0] = np.transpose(signalNoisyX)
-                        signalNoisy[:,:,1] = np.transpose(signalNoisyY)
+                        signalNoisy[:,0] = np.transpose(np.squeeze(signalNoisyX))
+                        signalNoisy[:,1] = np.transpose(np.squeeze(signalNoisyY))
 
             
             elif self.sliceProfileSwitch == 0:
@@ -1030,8 +1070,8 @@ class DictionaryGeneratorFast():
                         signalNoisy[:,:] = np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2)
                     elif self.complexFing == True:
                         # return the complex signal
-                        signalNoisy[:,:,0] = signalNoisyX
-                        signalNoisy[:,:,1] = signalNoisyY
+                        signalNoisy[:,0] = np.squeeze(signalNoisyX)
+                        signalNoisy[:,1] = np.squeeze(signalNoisyY)
                 
                 except:
                     signalNoisyX = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0)))
@@ -1048,8 +1088,8 @@ class DictionaryGeneratorFast():
                         signalNoisy[:,:] = np.transpose(np.sqrt((signalNoisyX)**2 + (signalNoisyY)**2))
                     elif self.complexFing == True:
                         # return the complex signal
-                        signalNoisy[:,:,0] = np.transpose(signalNoisyX)
-                        signalNoisy[:,:,1] = np.transpose(signalNoisyY)
+                        signalNoisy[:,0] = np.transpose(np.squeeze(signalNoisyX))
+                        signalNoisy[:,1] = np.transpose(np.squeeze(signalNoisyY))
             
 
             #Save signal         

@@ -17,7 +17,7 @@ def sinusoidal_TR(TRmax, TRmin, freq, N, instance, CSFNullSwitch = True, save = 
     if CSFNullSwitch == True:
         #trArray = np.insert(trArray,0,40)# empirical value to match the original FISP paper. with no CSF nulling
         T1CSF = 4658.3 # mean value from Bojorquez et al. MRI, 2017
-        trArray = np.insert(trArray,0,T1CSF*np.log(2)) # there is no pulse before the TI, so use EQ 14. from Bernstein book
+        trArray = np.insert(trArray,0,T1CSF*np.log(2)) # there is no pulse before the TI, so use EQ 14.36a. from Bernstein book
     if save == True:
      #Save array for calling in the main function later
         np.save('./functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
@@ -36,12 +36,25 @@ def fourier_TR(A_0, A_k, B_k, T, N_ter, N):
 
 """ FA variation OPTIONS"""
 
-def sinusoidal_FA(a_max, N, w_a, instance, invSwitch = True, save = True):
+def sinusoidal_FA(a_max, N, w_a, instance, invSwitch = True, save = True, b1Sensitivity = False):
     N_arr = np.array(range(N))
-    faArray = np.squeeze(a_max*(np.abs(3*np.sin(N_arr/w_a)+(np.sin(N_arr/w_a)**2)))) # sinusoid has a maximum value of 4, hence times by 0.25 to control the height
+    faArray = 0.25*np.squeeze(a_max*(np.abs(3*np.sin(N_arr/w_a)+(np.sin(N_arr/w_a)**2)))) # sinusoid has a maximum value of 4, hence times by 0.25 to control the height
     
     if invSwitch == True: # if an initial inversion is desired
         faArray[0] = 180
+
+    if b1Sensitivity == True:
+        #num_cycles = int(np.pi*w_a/30) + 1 #+ 1 # the number of on/off 90/0 deg cycles. 30 is the length of each cycle 15 on + 15 off. + 1 to make sure the correct FA length is found
+        #cycles = ((np.tile(np.concatenate((np.zeros(15), 90*np.ones(15))),num_cycles)).tolist())  
+        peak_width = int(np.pi*w_a)
+        n_peaks = int(N/peak_width)
+        on_off_length = N-len(faArray[:(n_peaks-1)*peak_width]) # calculates the number of leftover TRs
+        num_cycles = int(on_off_length/30) + 1 #+ 1 # the number of on/off 90/0 deg cycles. 30 is the length of each cycle 15 on + 15 off. + 1 to make sure the correct FA length is found
+        cycles = ((np.tile(np.concatenate((np.zeros(15), 90*np.ones(15))),num_cycles)).tolist())  
+        print(n_peaks)
+        print(peak_width)
+        faArray = np.concatenate((faArray[:(n_peaks-1)*peak_width], cycles))[:N]
+
 
     #Save array for calling in the main function later
     if save == True:

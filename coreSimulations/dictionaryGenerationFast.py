@@ -60,9 +60,9 @@ def parameterGeneration():
     # noOfIsochromatsX MUST be divisible by the vb steps
     # i.e. if 1% blood volume steps are required then need noOfIsochromatsX = 100 
     #      if 0.1% blood volume steps are required, noOfIsochromatsX = 1000 etc.
-    noOfIsochromatsX = 1000 #1000
+    noOfIsochromatsX = 10000 #1000
     noOfIsochromatsY = 1
-    noOfIsochromatsZ = 10 #number of samples in HALF of the profile
+    noOfIsochromatsZ = 1 #number of samples in HALF of the profile
     # TR train length
     noOfRepetitions = 1000 #1000 #1000 FISP
     
@@ -73,13 +73,9 @@ def parameterGeneration():
     #t1Array = np.array([1300,1800])
     #t2Array = np.array([72,165]) #np.array([71,165]) # T2 blood value taken from average range from Powell et al. [55-275]ms
     t2StarArray = np.array([50,21])
-
-    
      
-
-    ## DEFINITION OF VARIATIONS
-    
     """
+    ## DEFINITION OF VARIATIONS FOR SIMULATION
     # Specify the ranges and step sizes of the dictionary dimensions
     # intravascular water residence time (res) UNIT: ms
     resArray = range(200,1700,100) #range(200,1700,107) #range(200,1700,70) 
@@ -91,6 +87,7 @@ def parameterGeneration():
     t1bArray = range(1500,2100,200) #range(1540,1940,27) 
     # multiplication factor for the B1 value (multi)
     multiArray = range(80, 130, 10) #100
+
     # T2 of tissue compartment UNIT: ms
     t2tArray = range(38,127,15)
     # T2 of blood compartment UNIT: ms
@@ -99,19 +96,45 @@ def parameterGeneration():
         t2tArray= list(t2tArray)
         t2tArray[-1] = 112
     """
+    """SPGRE
+    t2tArray = [np.NaN]
+    # T2 of blood compartment UNIT: ms
+    t2bArray = [np.NaN]
+    """
+
+    """
+    if percArray[-1] > 100:
+        percArray= list(percArray)
+        percArray[-1] = 100
+    """
+    
+    #Testing limits
     resArray = [200] #range(200,1700,107) #range(200,1700,70) 
     # percentage blood volume (perc) UNIT: %
     percArray = [0]#[90] #REMEMBER IT WILL BE DIVIDED BY 10 110
     #T1 of tissue compartment (t1t) UNIT: ms
-    t1tArray = [700,750,800,850,900, 4500] #[1400] #range(700,1700,69) 
+    t1tArray = [700] #[1400] #range(700,1700,69) 
     #T1 of blood compartment (t1b) UNIT: ms
-    t1bArray = [700,750,800,850,900,4500]#[1500] #range(1540,1940,27) 
+    t1bArray = [700]#[1500] #range(1540,1940,27) 
     # multiplication factor for the B1 value (multi)
     multiArray = [100] #100
     # T2 of tissue compartment UNIT: ms
     t2tArray = [85]#[68]
     # T2 of blood compartment UNIT: ms
     t2bArray = [85] #[165]
+    
+
+
+    # Search space
+    print('Parameter space:')
+    print(f'Residence times: {list(resArray)}')
+    print(f'Blood Volume Percentage: {list(percArray)}')
+    print(f'T1t: {list(t1tArray)}')
+    print(f'Tbt: {list(t1bArray)}')
+    print(f'B1+: {list(multiArray)}')
+    print(f'T2t: {list(t2tArray)}')
+    print(f'T2b: {list(t2bArray)}')
+
 
 
     ## NOISE INFORMATION 
@@ -122,7 +145,7 @@ def parameterGeneration():
     #In folder will show as "DictionaryXXX" 
     #This folder needs to already exist or code will not run 
 
-    dictionaryId  = 'FISP_orig'
+    dictionaryId  = 'Discard'
 
     ## SHAPE OF VARIATIONS
     # TODO: add extra shape variations documentation
@@ -137,7 +160,7 @@ def parameterGeneration():
     #       gaps: same as sinusoidal but with user specifed sections of zero FA 
     #             without editing gaps will be after every 250 FAs (can be edited below)
     caseFA = 'FISPorig' #'sin' #'random'  #'gaps' 'FISP' 'FISPorig'
-    b1sens= True # changes the shape of the FA train; instead of Jiang et al. variation, it becomes the variation from doi: 10.1002/mrm.26009
+    b1sens= False # changes the shape of the FA train; instead of Jiang et al. variation, it becomes the variation from doi: 10.1002/mrm.26009
 
     # For repetition time [ms]: 
     #       random: random variation in FA between two values: d and e
@@ -146,9 +169,9 @@ def parameterGeneration():
     
     #states = [8.77345817, 147.49943504, 398.3546085, 5.81103981, 17.98150172]
     #a= states[0]; b = states[1]; c = states[2];  d = states[3]; e = states[4]
-    states = [8.90191785e+01, 8.50678055e+01, 8.88994604e+01, 8.98932576e+01,1.44671580e-03, 6.56840603e+01, 1.97728279e+02]
-    #states = [8.93273745e+01, 8.75231041e+01, 8.60932821e+01, 8.93060107e+01, 8.96990601e+01, 1.50754408e-03, 7.09833061e+01, 1.95289453e+02]
-    
+    #states = [8.90191785e+01, 8.50678055e+01, 8.88994604e+01, 8.98932576e+01,1.44671580e-03, 6.56840603e+01, 1.97728279e+02] # #ISMRM
+    # B1 OPTIM UPGRADE states = [8.77080631e+01, 8.86049847e+01, 8.83192444e+01, 8.79182172e+01, 8.42228904e+01, 8.87247902e+01, 8.92251865e+01, 8.79974962e+01, 8.85240518e+01, 8.02671601e-04, 8.72068319e+01, 1.98115750e+02]
+    states = [8.85357690e+01, 8.62215988e+01, 8.43992634e+01, 8.96210295e+01, 8.57002339e+01, 8.80460203e+01, 8.39164128e+01, 8.50884461e+01, 8.00508468e+01, 7.77892592e+01, 8.55644599e-04, 9.49214848e+01, 1.99304875e+02] #OPTIM no B1 sensitivity
     #If you want gaps in the flip angles, specify width here 
     if caseFA == 'gaps':
         gapLength = 80
@@ -156,9 +179,9 @@ def parameterGeneration():
     if caseFA == 'tester':
         faArray = [90]
 
-    CSFnullswitch = False
+    CSFnullswitch = True
 
-    #a = 13; b = 40; c =181; d = 100; e = 45 SPGRE
+    a = 13; b = 40; c =181; d = 100; e = 45 #SPGRE
 
     ''' ------------------------PARAMETER VARIATIONS-------------------------- '''
     
@@ -179,7 +202,8 @@ def parameterGeneration():
         # There may be a loss of SNR when the first flip angle is v low (e.g. 0.008)
         # so change the first flip angle to be a little higher
         if inv == 1:
-            faArray[0] = 180
+            #faArray[0] = 180
+            faArray = np.insert(faArray,0,180)
 
     if caseFA == 'FISPorig':
         # From https://onlinelibrary.wiley.com/doi/epdf/10.1002/mrm.25559
@@ -216,7 +240,7 @@ def parameterGeneration():
         if CSFnullswitch == True:
             faArray[0] = 180
         """
-        peaks = np.array(states[:-3]) # the final three elements in the state array relate to TR
+        peaks = np.array(states[:-3]) # the final three elements in the state array relate to TR, so go up to there
 
         faArray = TF.FISP_FA(peaks, noOfRepetitions, instance, invSwitch=True, save = False, b1Sensitivity=b1sens)
 
@@ -260,9 +284,21 @@ def parameterGeneration():
         #Calculate the sinusoidal array 
         trArray = e*np.sin(xRange/c)+(d+e) #FOR SIN FA SPGRE
         if CSFnullswitch == True:
-            trArray[0] = 2909
+            trArray[0] = 2909, look at optim_TR_FA_gen for TI
         """
-        trArray = TF.sinusoidal_TR(TRmax=states[-1], TRmin=states[-2], freq=states[-3], N = noOfRepetitions, instance= instance, CSFnullswitch = CSFnullswitch, save = False)
+        """
+        # For SPGRE
+        #Generate linearly spaced array between 0 and the number repetitions 
+        xRange = np.linspace(0,noOfRepetitions,num=noOfRepetitions)
+        #Calculate the sinusoidal array 
+        trArray = e*np.sin(xRange/c)+(d+e)
+        if inv == True:
+            #trArray = np.insert(trArray,0,40)# empirical value to match the original FISP paper. with no CSF nulling
+            T1CSF = 4658.3 # mean value from Bojorquez et al. MRI, 2017
+            trArray = np.insert(trArray,0,T1CSF*np.log(2)) # there is no pulse before the TI, and no repetitive TI pulse so use EQ 14.36a. from Bernstein book
+        """
+        # For FISP
+        trArray = TF.sinusoidal_TR(TRmax=states[-1], TRmin=states[-2], freq=states[-3], N = noOfRepetitions, instance= instance, CSFNullSwitch = CSFnullswitch, save = False)
 
     elif caseTR == 'random':
         #Generate a uniform random array between for the number of repetitions
@@ -280,7 +316,7 @@ def parameterGeneration():
         # https://onlinelibrary.wiley.com/doi/10.1002/mrm.25559 Perlin Noise
         trArray = np.genfromtxt('tr_jiang', delimiter=',', dtype=float) 
         if inv == 1:
-            trArray = np.insert(trArray,0,40)
+            trArray = np.insert(trArray,0,1) #40
     
     elif caseTR =='cao':
         trArray = np.load('tr_cao.npy') 
@@ -293,10 +329,31 @@ def parameterGeneration():
     #Save array for calling in the main function later
     np.save('./functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
 
+    fullSampling = False # to cover the whole parameter space
     #Get all combinations of arrays (parameters for each dictionary entry)
     #In format of list of tuples
     params = list(itertools.product(t1tArray, t1bArray, resArray, percArray, multiArray, t2tArray, t2bArray))
-    params = np.array(params)
+    
+    if fullSampling == True:
+        params = np.array(params)
+    
+    elif fullSampling == False:
+        # find mean T1 tissue and T1 blood
+        t1tmean = np.mean(t1tArray)
+        t1bmean = np.mean(t1bArray)
+        t2tmean = np.mean(t2tArray)
+        t2bmean = np.mean(t2bArray)
+
+        # remove params from the search space:
+        # if T1 tissue is above the mean, T2 tissue below the mean should be removed from list of params in itertools
+        filtered_combinations = [
+            (t1t, t1b, res, perc, multi, t2t, t2b) for t1t, t1b, res, perc, multi, t2t, t2b, in params
+            if not (t1t > t1tmean and t2t < t2tmean) and not(t1b > t1bmean and t2b < t2bmean) and not (t2t > t2tmean and t1t < t1tmean) and not (t2b > t2bmean and t1b < t1bmean) 
+        ]
+
+        params =  np.array(filtered_combinations)
+        print(f'Calculating {len(params)} parameter combinations.')
+
     #Generate a list of the remaining parameters than need to be passed into
     #the main function 
     otherParams = list([t2StarArray, noOfIsochromatsX, noOfIsochromatsY,
@@ -331,7 +388,7 @@ def simulationFunction(paramArray):
     # Is slice profile accounted for
     sliceProfileSwitch = 0
     #Null CSF using inversion
-    CSFnullswitch = True
+    CSFnullswitch = False
     # Number of noise samples generated 
     # Set to one for dictionary gneeration 
     samples = 1

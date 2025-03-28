@@ -61,29 +61,33 @@ def match_signal(test_name, dictionary, acqlen, noise, samples):
     return max_index # return the index of the best dictionary match
 
 def process_matching(params):
-    T1t, T1b, T2t, T2b, res, per, multi, res_ave,res_std, res_est, sampleid, dictionary, lookup, acqlen, samples = params
-    for noise in range(res_ave.shape[0]): # number of noise levels is in the res_ave shape
-        samp = 50
-        perc = per/10
-        test_name = './simulationData/noisy_ISMRM' + '/echo_' + str(T1t) + '_' + str(T1b) + '_' + str(T2t)+ '_' + str(T2b) + '_' +  str(res) + '_' + str(perc) + '_' + str(multi/100) + '_' + str(samp) + '.npy' 
-        max_index = match_signal(test_name, dictionary, acqlen, noise, samples)
-        matched_signal= lookup[max_index,:]
-        res_est[:, :samp] = matched_signal.T
-        res_ave[noise, :] = np.median(res_est[:, 1:], axis=1)
-        res_std[noise, :] = iqr(res_est[:, 1:], axis=1)
-    
-    # Save results
-    pc = [res_ave, res_std]
-    file_name = f'./simulationData/noisy_ISMRM_matching/{T1t}_{T1b}_{T2t}_{T2b}_{res}_{perc}_{multi/100}_pc.npy'
-    np.save(file_name, pc)
-    # print results
-    """
-    print('Input signal')
-    print(test_name)  
-    print ('Matched:')
-    print(str(res_ave[0,0]), str(res_ave[0,1]),
-        str(res_ave[0,2]), str(res_ave[0,3]), str(res_ave[0,4]), str(res_ave[0,5]),str(res_ave[0,6]))
-    """
+    T1t, T1b, T2t, T2b, res, per, multi, res_ave,res_std, res_est, dictionary, lookup, acqlen, samples = params
+    file_name = f'./simulationData/noisy_ISMRM_less_matching/{T1t}_{T1b}_{T2t}_{T2b}_{res}_{per/10}_{multi/100}_pc.npy'
+    if not os.path.exists(file_name):
+        try:
+            for noise in range(res_ave.shape[0]): # number of noise levels is in the res_ave shape
+                samp = 50
+                perc = per/10
+                test_name = './simulationData/noisy_ISMRM_less' + '/echo_' + str(T1t) + '_' + str(T1b) + '_' + str(T2t)+ '_' + str(T2b) + '_' +  str(res) + '_' + str(perc) + '_' + str(multi/100) + '_' + str(samp) + '.npy' 
+                max_index = match_signal(test_name, dictionary, acqlen, noise, samples)
+                matched_signal= lookup[max_index,:]
+                res_est[:, :samp] = matched_signal.T
+                res_ave[noise, :] = np.median(res_est[:, 1:], axis=1)
+                res_std[noise, :] = iqr(res_est[:, 1:], axis=1)
+            
+            # Save results
+            pc = [res_ave, res_std]
+            np.save(file_name, pc)
+        except:
+            print(f'Error processing {T1t}_{T1b}_{T2t}_{T2b}_{res}_{per}_{multi/100}')
+        # print results
+        """
+        print('Input signal')
+        print(test_name)  
+        print ('Matched:')
+        print(str(res_ave[0,0]), str(res_ave[0,1]),
+            str(res_ave[0,2]), str(res_ave[0,3]), str(res_ave[0,4]), str(res_ave[0,5]),str(res_ave[0,6]))
+        """
     return None
 
 if __name__ == "__main__":
@@ -94,7 +98,7 @@ if __name__ == "__main__":
 
     """----------------------------INPUTS---------------------------------"""
     #number of noise levels used in generation
-    noi = 2
+    noi = 1
     #number of samples at each noise level used in generation
     samples = 50
     #length of signal
@@ -106,7 +110,7 @@ if __name__ == "__main__":
 
     #Name of the dictioanry
     dictionaryid = 'FISP_WEX_ISMRM'
-    sampleid = dictionaryid
+
 
     #load in dictionary 
     #Load files
@@ -156,17 +160,16 @@ if __name__ == "__main__":
     # remove params from the search space:
     # if T1 tissue is above the mean, T2 tissue below the mean should be removed from list of params in itertools
 
-
     # to iterate through all possible simulation values
     params = list(itertools.product(t1tArray, t1bArray, t2tArray, t2bArray, resArray, percArray, multiArray))
     filtered_combinations = [
     (t1t, t1b, t2t, t2b, res, perc, multi) for t1t, t1b, t2t, t2b, res, perc, multi in params
     if not (t1t > t1tmean and t2t < t2tmean) and not(t1b > t1bmean and t2b < t2bmean) and not (t2t > t2tmean and t1t < t1tmean) and not (t2b > t2bmean and t1b < t1bmean) 
     ]
-
-
+    params = filtered_combinations
+    print(len(params))
 ##########################
-    otherParams = list([res_ave,res_std, res_est, sampleid, dictionary,lookup, acqlen, samples])
+    otherParams = list([res_ave,res_std, res_est, dictionary,lookup, acqlen, samples])
     # Verify the shape of params
 
     otherParams = np.tile(np.array(otherParams, dtype=object),[np.size(params,0),1])

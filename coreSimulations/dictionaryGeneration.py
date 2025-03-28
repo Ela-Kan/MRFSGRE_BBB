@@ -101,12 +101,16 @@ def parameterGeneration():
     #       gaps: same as sinusoidal but with user specifed sections of zero FA 
     #             without editing gaps will be after every 250 FAs (can be edited below)
     caseFA = 'sin' #'random'  #'gaps'
-    a = 13; b = 40
+
+    
+    #a = 13; b = 40
     # For repetition time [ms]: 
     #       random: random variation in FA between two values: d and e
     #       sin: sinusoidal variation with min TR = d, max TR = 2*e+d, period = 2*pi*c
     caseTR = 'sin' # #'sin' #'random' 
-    c =181; d = 100; e = 45
+    #c =181; d = 100; e = 45
+    a = 26.66730864; b = 228.44445831; c = 216.43140775; d = 99.68441519; e =  199.65583648
+    
     
     #If you want gaps in the flip angles, specify width here 
     if caseFA == 'gaps':
@@ -115,6 +119,7 @@ def parameterGeneration():
     ''' ------------------------PARAMETER VARIATIONS-------------------------- '''
     
     ##  DEFINING FA ARRAY
+    
     
     if caseFA == 'sin':
         #Generate linearly spaced array between 0 and the number repetitions 
