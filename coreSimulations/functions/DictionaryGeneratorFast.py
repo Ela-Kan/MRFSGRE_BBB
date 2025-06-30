@@ -1,4 +1,21 @@
-""" Class for methods to generate a Magnetic Resonance Fingerprinting (MRF) dictionary using the GPU."""
+"""-----------------------------------------------------------------------------
+Dictionary generation class for a MR fingerprint using a bloch simiulation of a 
+two compartment model with a semipermeable barrier 
+
+VARIATIONS IN: 
+    - vb: percentage blood volume 
+    - tb: intravascular water residence time 
+    - T1t: T1 of tissue compartment
+    - T1b: T1 of blood compartment 
+    - B1+: B1 multiplication factor
+
+Author: Ela Kanani, adapted from Emma Thomson
+Year: 2025
+Institution: Centre for Medical Image Computing: University College London
+Email: e.kanani.21@ucl.ac.uk
+----------------------------------------------------------------------------"""
+
+''' -----------------------------PACKAGES--------------------------------- '''
 
 """ PACKAGE IMPORTS """
 import numpy as np
@@ -9,6 +26,7 @@ import warnings
 from scipy import signal, io
 import numba_helper as nbh
 from line_profiler import LineProfiler
+
 
 class DictionaryGeneratorFast():
     # Initialise the class
@@ -81,8 +99,10 @@ class DictionaryGeneratorFast():
         self.sequence = sequence
         self.instance = instance
         self.sliceProfileSwitch = sliceProfileSwitch
+
+        # What type of file saving structure. Npy is the original method. hdf5 is the newer more efficient method. 'None' means do not save
+        self.filesavetype = 'hdf5'
         
-  
     
         # PARAMETER DECLARATION
         
@@ -182,7 +202,7 @@ class DictionaryGeneratorFast():
         elif self.sliceProfileSwitch == 0: 
             #If you want flat slice profile then this (i.e. homogenous excitation profile across the slice thickness)
             self.sliceProfile = np.tile(np.expand_dims(np.round(np.linspace(1,90,90*100),0), axis=1),noOfIsochromatsZ)   
-            self.sliceProfileType = 'FISP' # arbitrary so the code continues to work
+            self.sliceProfileType = 'None' # arbitrary so the code continues to work
 
         '''
         PEAK LOCATIONS
@@ -428,7 +448,7 @@ class DictionaryGeneratorFast():
         """
 
 
-        integerFlip = False # flag for slice profile of original FISP paper select false
+        integerFlip = True # flag for slice profile of original FISP paper select false
     
         
         # Flag for integer flip angles
@@ -451,13 +471,12 @@ class DictionaryGeneratorFast():
 
 
         elif self.sliceProfileSwitch == 0 and integerFlip == True:
-            fa = self.multi*np.ones([self.noOfIsochromatsZ])*(self.faArray[loop])
+            fa = self.multi*np.ones(self.noOfIsochromatsZ)*(self.faArray[loop])
             fa = fa.astype(int)
             
         
         #Convert to radians
         thetaX = np.deg2rad(fa) #((fa/360)*2*np.pi)
-        print(fa)
      
         
         rotX = np.zeros([len(thetaX),3,3])
@@ -567,22 +586,22 @@ class DictionaryGeneratorFast():
         gradientMatrix = self.gradientX*self.positionArrayX 
         gradientMatrix += self.gradientY*self.positionArrayY
 
-         # Gyromagnetic ratio for proton 42.6 MHz/T
-        omegaArray = np.repeat(np.expand_dims((42.576)*gradientMatrix, axis=2), self.noOfIsochromatsZ, axis=2) * self.deltaT
+         # Gyromagnetic ratio for proton 42.6 MHz/T 42.576
+        omegaArray = np.repeat(np.expand_dims((42.6)*gradientMatrix, axis=2), self.noOfIsochromatsZ, axis=2) #* self.deltaT
 
         #for the precessions generate an array storing the 3x3 rotation matrix 
         #for each isochromat
         precession = np.zeros([np.size(self.positionArrayX,0), np.size(self.positionArrayY,1),self.noOfIsochromatsZ, 3,3])
         precession[:,:,:,2,2] = 1
-        
-        
+   
         # compute the trigonometric functions for the rotation matrices
-        sin_omega_deltaT, cos_omega_deltaT = nbh.sincos(omegaArray)
+        sin_omega_deltaT, cos_omega_deltaT = nbh.sincos(omegaArray*self.deltaT)
+  
         precession[:,:,:,0,0] = cos_omega_deltaT
         precession[:,:,:,0,1] = -sin_omega_deltaT
         precession[:,:,:,1,0] = sin_omega_deltaT
         precession[:,:,:,1,1] = cos_omega_deltaT
-
+   
         return precession
     
     def applied_precession(self, gradientDuration, totalTime, signal_flag = True, saveMxMy =False, mxy_history_tissue=None, mxy_history_blood=None, current_tr_index=0):
@@ -828,7 +847,6 @@ class DictionaryGeneratorFast():
 
         ### Loop over each TR repetitions
         for loop in range(self.noOfRepetitions):
-            
             '''
             WATER EXCHANGE
             '''  
@@ -867,8 +885,9 @@ class DictionaryGeneratorFast():
             timeArray = timeArray * reset 
             
             
+            
             if self.sequence == 'SPGRE':           
-                perfect_spoil = False                
+                perfect_spoil = True                
                 ###    RF PULSE
                 #Application of RF pulse modifying the vecM arrays
                 self.rfpulse(loop)
@@ -894,7 +913,7 @@ class DictionaryGeneratorFast():
                 ## SECOND GRADIENT - DOUBLE LENGTH
                 #Precession occuring during gradient application 
                 #Accounts for relaxation and applies precession to the vecM
-                saveMxMy = True
+                saveMxMy = False
                 if saveMxMy == False or loop > 10:
                     totalTime = self.applied_precession(secondGradientDuration, totalTime)
                 elif saveMxMy == True:
@@ -992,13 +1011,6 @@ class DictionaryGeneratorFast():
         vecPeaks = np.expand_dims(self.signal,axis=5)
         vecPeaks = np.tile(vecPeaks, [self.noise])
         
-        #signal save file name
-        if self.sequence == 'SPGRE':
-            signalName = 'echo_' + str(self.t1Array[0]) + '_' + str(self.t1Array[1]) + '_'  \
-            + str(self.res) + '_' + str(self.perc) + '_' + str(self.multi) + '_'
-        if self.sequence == 'FISP':
-            signalName = 'echo_' + str(self.t1Array[0]) + '_' + str(self.t1Array[1]) + '_'  + str(self.t2Array[0]) + '_'  + str(self.t2Array[1]) + '_'\
-            + str(self.res) + '_' + str(self.perc) + '_' + str(self.multi) + '_'
             
         
         #Open noisy signal array, dependent if complex or magnitude data is sought after
@@ -1056,6 +1068,7 @@ class DictionaryGeneratorFast():
 
             
             elif self.sliceProfileSwitch == 0:
+                print('no slice profile')
                 try:
                     signalNoisyX = (np.squeeze((np.sum(np.sum(np.sum(vecPeaks[:,:,:,0,:,:],axis=0),axis=0),axis=0))) + 
                                     (self.noOfIsochromatsX*self.noOfIsochromatsY*self.noOfIsochromatsZ*(1/self.noOfIsochromatsX*self.noOfIsochromatsY))*
@@ -1092,11 +1105,19 @@ class DictionaryGeneratorFast():
                         signalNoisy[:,1] = np.transpose(np.squeeze(signalNoisyY))
             
 
-            #Save signal         
-            name = '../dictionaries/Dictionary' + self.dictionaryId +'/' + signalName + str(samp + 1)
-            #signalNoisy = signalNoisy/(self.noOfIsochromatsX*self.noOfIsochromatsY*self.noOfIsochromatsZ) # max magnetisation needs to equal 1, right now each
-            np.save(name, signalNoisy)
+            #Save signal according to structure
+            if self.filesavetype == 'npy':
+                #signal save file name
+                if self.sequence == 'SPGRE':
+                    signalName = 'echo_' + str(int(self.t1Array[0]))+ '_' + str(int(self.t1Array[1])) + '_'  \
+                    + str(int(self.res)) + '_' + str(self.perc) + '_' + str(self.multi) + '_'
+                if self.sequence == 'FISP':
+                    signalName = 'echo_' + str(self.t1Array[0]) + '_' + str(self.t1Array[1]) + '_'  + str(self.t2Array[0]) + '_'  + str(self.t2Array[1]) + '_'\
+                    + str(self.res) + '_' + str(self.perc) + '_' + str(self.multi) + '_'
+                name = '../dictionaries/Dictionary' + self.dictionaryId +'/' + signalName + str(samp + 1)
+                np.save(name, signalNoisy)
+
+            if self.filesavetype == 'hdf5' or 'None':
+                return signalNoisy
         
-
-
         return signalNoisy

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """-----------------------------------------------------------------------------
-Dictionary generation for a MR fingerprint using a bloch simiulation of a 
+Dictionary generation script for a MR fingerprint using a bloch simiulation of a 
 two compartment model with a semipermeable barrier 
 
 VARIATIONS IN: 
@@ -10,8 +10,8 @@ VARIATIONS IN:
     - T1b: T1 of blood compartment 
     - B1+: B1 multiplication factor
 
-Author: Emma Thomson
-Year: 2022
+Author: Emma Thomson and Ela Kanani
+Year: 2022-2025
 Institution: Centre for Medical Image Computing: University College London
 Email: e.thomson.19@ucl.ac.uk
 ----------------------------------------------------------------------------"""
@@ -30,6 +30,7 @@ from line_profiler import LineProfiler
 from perlin_noise import PerlinNoise
 import random
 import optim_TR_FA_gen as TF
+import h5py # for file saving
 
 
 #go up a folder
@@ -48,6 +49,7 @@ def parameterGeneration():
     allParams : list of tuples
         List of tuples containing the parameters for each dictionary entry
     """
+
     
     # To allow for multiple instances of the same code to be run simulataneously 
     # an instance is specified to ensure FA and TR array files are called 
@@ -60,11 +62,11 @@ def parameterGeneration():
     # noOfIsochromatsX MUST be divisible by the vb steps
     # i.e. if 1% blood volume steps are required then need noOfIsochromatsX = 100 
     #      if 0.1% blood volume steps are required, noOfIsochromatsX = 1000 etc.
-    noOfIsochromatsX = 10000 #1000
+    noOfIsochromatsX = 1000 #1000
     noOfIsochromatsY = 1
-    noOfIsochromatsZ = 1 #number of samples in HALF of the profile
+    noOfIsochromatsZ = 10 #number of samples in HALF of the profile
     # TR train length
-    noOfRepetitions = 1000 #1000 #1000 FISP
+    noOfRepetitions = 2000 
     
     ## TISSUE PROPERTIES
     #Assign initial arrays for the tissue values 
@@ -74,6 +76,7 @@ def parameterGeneration():
     #t2Array = np.array([72,165]) #np.array([71,165]) # T2 blood value taken from average range from Powell et al. [55-275]ms
     t2StarArray = np.array([50,21])
      
+    
     """
     ## DEFINITION OF VARIATIONS FOR SIMULATION
     # Specify the ranges and step sizes of the dictionary dimensions
@@ -95,23 +98,24 @@ def parameterGeneration():
     if t2tArray[-1] > 112:
         t2tArray= list(t2tArray)
         t2tArray[-1] = 112
-    """
-    """SPGRE
+    
+    #SPGRE
     t2tArray = [np.NaN]
     # T2 of blood compartment UNIT: ms
     t2bArray = [np.NaN]
-    """
+    
 
-    """
+    
     if percArray[-1] > 100:
         percArray= list(percArray)
         percArray[-1] = 100
-    """
+
     
+    """
     #Testing limits
-    resArray = [200] #range(200,1700,107) #range(200,1700,70) 
+    resArray = [200, 1700] #range(200,1700,107) #range(200,1700,70) 
     # percentage blood volume (perc) UNIT: %
-    percArray = [0]#[90] #REMEMBER IT WILL BE DIVIDED BY 10 110
+    percArray = [20]#[90] #REMEMBER IT WILL BE DIVIDED BY 10 110
     #T1 of tissue compartment (t1t) UNIT: ms
     t1tArray = [700] #[1400] #range(700,1700,69) 
     #T1 of blood compartment (t1b) UNIT: ms
@@ -145,7 +149,7 @@ def parameterGeneration():
     #In folder will show as "DictionaryXXX" 
     #This folder needs to already exist or code will not run 
 
-    dictionaryId  = 'Discard'
+    dictionaryId  = 'testing'
 
     ## SHAPE OF VARIATIONS
     # TODO: add extra shape variations documentation
@@ -159,19 +163,29 @@ def parameterGeneration():
     #            width of half peak = pi*b 
     #       gaps: same as sinusoidal but with user specifed sections of zero FA 
     #             without editing gaps will be after every 250 FAs (can be edited below)
-    caseFA = 'FISPorig' #'sin' #'random'  #'gaps' 'FISP' 'FISPorig'
-    b1sens= False # changes the shape of the FA train; instead of Jiang et al. variation, it becomes the variation from doi: 10.1002/mrm.26009
+    caseFA = 'FISP' #'sin' #'random'  #'gaps' 'FISP' 'FISPorig'
+    b1sens= True # changes the shape of the FA train; instead of Jiang et al. variation, it becomes the variation from doi: 10.1002/mrm.26009
 
     # For repetition time [ms]: 
     #       random: random variation in FA between two values: d and e
     #       sin: sinusoidal variation with min TR = d, max TR = 2*e+d, period = 2*pi*c
-    caseTR = 'perlin' # #'sin' #'random' 'perlin' for original FISP use last
+    caseTR = 'sin' # #'sin' #'random' 'perlin' for original FISP use last
     
     #states = [8.77345817, 147.49943504, 398.3546085, 5.81103981, 17.98150172]
     #a= states[0]; b = states[1]; c = states[2];  d = states[3]; e = states[4]
     #states = [8.90191785e+01, 8.50678055e+01, 8.88994604e+01, 8.98932576e+01,1.44671580e-03, 6.56840603e+01, 1.97728279e+02] # #ISMRM
     # B1 OPTIM UPGRADE states = [8.77080631e+01, 8.86049847e+01, 8.83192444e+01, 8.79182172e+01, 8.42228904e+01, 8.87247902e+01, 8.92251865e+01, 8.79974962e+01, 8.85240518e+01, 8.02671601e-04, 8.72068319e+01, 1.98115750e+02]
-    states = [8.85357690e+01, 8.62215988e+01, 8.43992634e+01, 8.96210295e+01, 8.57002339e+01, 8.80460203e+01, 8.39164128e+01, 8.50884461e+01, 8.00508468e+01, 7.77892592e+01, 8.55644599e-04, 9.49214848e+01, 1.99304875e+02] #OPTIM no B1 sensitivity
+    #states = [8.85357690e+01, 8.62215988e+01, 8.43992634e+01, 8.96210295e+01, 8.57002339e+01, 8.80460203e+01, 8.39164128e+01, 8.50884461e+01, 8.00508468e+01, 7.77892592e+01, 8.55644599e-04, 9.49214848e+01, 1.99304875e+02] #OPTIM no B1 sensitivity
+    
+    # SPGRE with gaps no B1
+    #states= [8.71726821e+01, 7.67376773e+01, 8.10755549e+01, 8.07295229e+01, 8.82888966e+01, 7.98735227e+01, 8.26042046e+01, 8.85394425e+01, 8.42147494e+01, 8.35724932e+01, 7.83994505e-04, 7.70823238e+01, 1.99759951e+02] 
+
+    # SPGRE with gaps and B1
+    #states = [8.05972996e+01, 8.68105989e+01, 8.18884069e+01, 8.36050064e+01, 8.45232250e+01, 8.21134436e+01, 8.99291864e+01, 7.99327603e+01, 8.72270569e+01, 2.21816834e+01, 6.58203740e-04, 9.40960611e+01, 1.98140993e+02]
+    
+    # SPGRE 1 perc optimisation with B1
+    states = [8.71558175e+01, 6.82548135e+01, 8.53561495e+01, 7.32558965e+01, 6.57537733e+01, 6.04965809e+01, 5.42949934e+01, 7.62244817e+01, 7.89094684e+01, 8.08282976e-04, 5.41718401e+01, 1.97380034e+02]
+    
     #If you want gaps in the flip angles, specify width here 
     if caseFA == 'gaps':
         gapLength = 80
@@ -181,7 +195,7 @@ def parameterGeneration():
 
     CSFnullswitch = True
 
-    a = 13; b = 40; c =181; d = 100; e = 45 #SPGRE
+    #a = 13; b = 40; c =181; d = 100; e = 45 #SPGRE emma
 
     ''' ------------------------PARAMETER VARIATIONS-------------------------- '''
     
@@ -215,31 +229,6 @@ def parameterGeneration():
 
 
     if caseFA == 'FISP':
-        """
-        # Set the number of points
-        Nrf = 200
-        noOfRepetitions = 1000
-        cycles = noOfRepetitions/Nrf
-        faArray = []
-        min_angle = 5
-        #ßmaxFA = random.sample(range(5,90),int(cycles)) # random sample of flip angles
-        #maxFA = [a-min_angle,b-min_angle,c-min_angle,d-min_angle,e-min_angle] # values from the paper
-        maxFA = [88,88,88,88,88,88,88,88,88,88] # values from the paper
-        for i in range(int(cycles)):
-            # Current random flip angle
-            maxFA_i = maxFA[i]
-            # Iterate through the segment
-            for j in range(1,Nrf):
-                # Calculate the flip angle
-                flipAngle = np.sin(j*np.pi/Nrf)*maxFA_i
-                # Append the flip angle to the array
-                faArray.append(flipAngle+min_angle)
-            faArray += [0,0,0,0,0,0,0,0,0,0]
-        faArray = faArray[:noOfRepetitions]
-
-        if CSFnullswitch == True:
-            faArray[0] = 180
-        """
         peaks = np.array(states[:-3]) # the final three elements in the state array relate to TR, so go up to there
 
         faArray = TF.FISP_FA(peaks, noOfRepetitions, instance, invSwitch=True, save = False, b1Sensitivity=b1sens)
@@ -278,25 +267,6 @@ def parameterGeneration():
     ##  DEFINING TR ARRAY
   
     if caseTR == 'sin':
-        """
-        #Generate linearly spaced array between 0 and the number repetitions 
-        xRange = np.linspace(0,noOfRepetitions,num=noOfRepetitions)
-        #Calculate the sinusoidal array 
-        trArray = e*np.sin(xRange/c)+(d+e) #FOR SIN FA SPGRE
-        if CSFnullswitch == True:
-            trArray[0] = 2909, look at optim_TR_FA_gen for TI
-        """
-        """
-        # For SPGRE
-        #Generate linearly spaced array between 0 and the number repetitions 
-        xRange = np.linspace(0,noOfRepetitions,num=noOfRepetitions)
-        #Calculate the sinusoidal array 
-        trArray = e*np.sin(xRange/c)+(d+e)
-        if inv == True:
-            #trArray = np.insert(trArray,0,40)# empirical value to match the original FISP paper. with no CSF nulling
-            T1CSF = 4658.3 # mean value from Bojorquez et al. MRI, 2017
-            trArray = np.insert(trArray,0,T1CSF*np.log(2)) # there is no pulse before the TI, and no repetitive TI pulse so use EQ 14.36a. from Bernstein book
-        """
         # For FISP
         trArray = TF.sinusoidal_TR(TRmax=states[-1], TRmin=states[-2], freq=states[-3], N = noOfRepetitions, instance= instance, CSFNullSwitch = CSFnullswitch, save = False)
 
@@ -305,14 +275,6 @@ def parameterGeneration():
         trArray = np.random.uniform(d,e,[noOfRepetitions])
    
     elif caseTR =='perlin':
-        """
-        perlin = PerlinNoise(octaves=3, seed=8)
-        trArray = np.array([perlin(i/noOfRepetitions) for i in range(noOfRepetitions)])
-        # scale TR to our range (FIX SO THIS ISN'T HARDCODED)
-        min_TR = 11.5
-        max_TR = 14.5
-        trArray = (trArray-min(trArray))/(max(trArray)-min(trArray))*(max_TR-min_TR)+min_TR
-        """
         # https://onlinelibrary.wiley.com/doi/10.1002/mrm.25559 Perlin Noise
         trArray = np.genfromtxt('tr_jiang', delimiter=',', dtype=float) 
         if inv == 1:
@@ -325,17 +287,17 @@ def parameterGeneration():
         trArray = np.ones((noOfRepetitions,))*40
         
 
-
     #Save array for calling in the main function later
     np.save('./functions/holdArrays/trArray_' + str(instance) + '.npy', trArray)
 
-    fullSampling = False # to cover the whole parameter space
+    fullSampling = True # to cover the whole parameter space
     #Get all combinations of arrays (parameters for each dictionary entry)
     #In format of list of tuples
-    params = list(itertools.product(t1tArray, t1bArray, resArray, percArray, multiArray, t2tArray, t2bArray))
+
+    tissue_params = list(itertools.product(t1tArray, t1bArray, resArray, percArray, multiArray, t2tArray, t2bArray))
     
     if fullSampling == True:
-        params = np.array(params)
+        params = np.array(tissue_params)
     
     elif fullSampling == False:
         # find mean T1 tissue and T1 blood
@@ -365,7 +327,7 @@ def parameterGeneration():
     #Convert tuple to array
     allParams = list(np.append(params, otherParams, axis=1)) 
       
-    return allParams
+    return allParams, np.array(tissue_params)
 
 #Definition of the function that will be parallised
 #Requires a single argument for parallelisation to work so previous function 
@@ -378,6 +340,8 @@ def simulationFunction(paramArray):
     ----------- 
     paramArray : list
         List of parameters for one dictionary entry
+
+
     """
     
     sys.path.insert(0, "./functions/")
@@ -386,14 +350,17 @@ def simulationFunction(paramArray):
     #Is there an inversion pulse, THIS NEEDS REMOVING IT DOES NOTHING
     invSwitch = True
     # Is slice profile accounted for
-    sliceProfileSwitch = 0
+    sliceProfileSwitch = 1
     #Null CSF using inversion
-    CSFnullswitch = False
+    CSFnullswitch = True
     # Number of noise samples generated 
     # Set to one for dictionary gneeration 
     samples = 1
     
     parameters = tuple(paramArray)
+
+    # type of sequence (FISP or SPGRE)
+    sequence = 'SPGRE'
 
     t1Array = np.array([parameters[0],parameters[1]])
     #These parameters are: 
@@ -405,7 +372,7 @@ def simulationFunction(paramArray):
     dictionaryGenerator =  DictionaryGeneratorFast(t1Array, t2Array,
             parameters[7], parameters[8], parameters[9],parameters[14],
             parameters[10], parameters[11], parameters[3]/10, parameters[2],
-            parameters[4]/100,invSwitch, CSFnullswitch, sliceProfileSwitch, samples, parameters[12], 'FISP', parameters[13])
+            parameters[4]/100,invSwitch, CSFnullswitch, sliceProfileSwitch, samples, parameters[12], sequence, parameters[13])
     
     profile = False # Set to True to profile the function to test for bottle necks (default is False)
 
@@ -415,8 +382,8 @@ def simulationFunction(paramArray):
         # Enable profiling
         pr.enable()
     
-        # Run the dictionary gener ation
-        dictionaryGenerator.MRFSGRE()
+        # Run the dictionary generation
+        signal = dictionaryGenerator.MRFSGRE()
         
         # Disable profiling
         pr.disable()
@@ -438,9 +405,9 @@ def simulationFunction(paramArray):
         lp.dump_stats("profile_results.txt")
         lp.print_stats()
         """
-        dictionaryGenerator.MRFSGRE()
+        signal = dictionaryGenerator.MRFSGRE()
     # Return the result
-    return None
+    return signal
 
 
 '''-------------------------MAIN DICTIONARY LOOPS---------------------------'''
@@ -457,6 +424,9 @@ if __name__ == '__main__':
     import itertools
     import multiprocessing as mp
 
+    filesavetype = 'hdf5'
+
+    sequence = 'SPGRE'
 
     print('Beginning dictionary generation...')
 
@@ -473,20 +443,49 @@ if __name__ == '__main__':
     t0 = time.time()
 
     #Generate the parameters
-    params = parameterGeneration()
+    params, tissue_params = parameterGeneration()
     
+    if filesavetype == 'npy':
+        #Run main function in parallel 
+        #Current laptop (2021 M1 Macbook Pro) will have 8 CPUs available
+        try:
+            pool.map(simulationFunction, params)
+        finally:
+            #Terminate and join the threads after parallelisation is done
+            pool.terminate()
+            pool.join()
+            pool.close()
 
-    #Run main function in parallel 
-    #Current laptop (2021 M1 Macbook Pro) will have 8 CPUs available
-    try:
-        pool.map(simulationFunction, params)
-    finally:
-        #Terminate and join the threads after parallelisation is done
-        pool.terminate()
-        pool.join()
-        pool.close()
+    elif filesavetype == 'hdf5':
+
+        try:
+            fingerprints_list = pool.map(simulationFunction, params)
+        finally:
+            #Terminate and join the threads after parallelisation is done
+            pool.terminate()
+            pool.join()
+            pool.close()
+
+            dictionaryId  = 'testing'
+            # Stack the list of arrays of fingerprints into a single large np array
+            final_dictionary = np.array(fingerprints_list, dtype=np.float32)
+            output_path = f'../dictionaries/Dictionary{dictionaryId}'
+            os.makedirs(output_path, exist_ok=True) # make the folder if it doesn't exist
+            print('Saving to HDF5 file...')
+            with h5py.File(f'{output_path}/dictionary.h5', 'w') as f:
+                f.create_dataset('dictionary', data = final_dictionary, compression = 'gzip')
+                if sequence == 'SPGRE':
+                    print(tissue_params.shape)
+                    f.create_dataset('parameters', data = tissue_params[:,0:5], compression = 'gzip') # corresponding parameters to fingerprints
+                elif sequence == 'FISP':
+                    f.create_dataset('parameters', data = tissue_params, compression = 'gzip') # corresponding parameters to fingerprints
+                
+                #f.create_dataset('parameter_names', data=np.string(parameter_names)) # save parameter names to file for easy processing
+    
+    print('Completed all actions.')
+            
 
     #Stop timer and print                                                    
     t1 = time.time()
     total = t1-t0
-    print(total)   
+    print(f'Pipeline took {total}s')   

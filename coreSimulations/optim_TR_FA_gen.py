@@ -47,12 +47,10 @@ def sinusoidal_FA(a_max, N, w_a, instance, invSwitch = True, save = True, b1Sens
         #num_cycles = int(np.pi*w_a/30) + 1 #+ 1 # the number of on/off 90/0 deg cycles. 30 is the length of each cycle 15 on + 15 off. + 1 to make sure the correct FA length is found
         #cycles = ((np.tile(np.concatenate((np.zeros(15), 90*np.ones(15))),num_cycles)).tolist())  
         peak_width = int(np.pi*w_a)
-        n_peaks = int(N/peak_width)
+        n_peaks = int(np.ceil(N/peak_width)) # ceil to ensure that the last peak is considered
         on_off_length = N-len(faArray[:(n_peaks-1)*peak_width]) # calculates the number of leftover TRs
         num_cycles = int(on_off_length/30) + 1 #+ 1 # the number of on/off 90/0 deg cycles. 30 is the length of each cycle 15 on + 15 off. + 1 to make sure the correct FA length is found
         cycles = ((np.tile(np.concatenate((np.zeros(15), 90*np.ones(15))),num_cycles)).tolist())  
-        print(n_peaks)
-        print(peak_width)
         faArray = np.concatenate((faArray[:(n_peaks-1)*peak_width], cycles))[:N]
 
 
@@ -60,6 +58,7 @@ def sinusoidal_FA(a_max, N, w_a, instance, invSwitch = True, save = True, b1Sens
     if save == True:
         np.save('./functions/holdArrays/faArray_'  + str(instance) + '.npy', faArray)
     return faArray
+
 
 
 def FISP_FA(peaks, N, instance, invSwitch = True, save = True, b1Sensitivity = True):
